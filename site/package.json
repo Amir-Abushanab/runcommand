@@ -1,0 +1,17 @@
+{
+  "name": "runcommand-site",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Showcase / GitHub Pages site for runcommand.",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check"
+  },
+  "dependencies": {
+    "astro": "^7.2.0"
+  },
+  "packageManager": "pnpm@11.18.0"
+}

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="158" viewBox="0 0 900 158"
+     font-family="Menlo, 'SF Mono', SFMono-Regular, Consolas, monospace">
+  <rect x="1.5" y="1.5" width="897" height="155" rx="13" fill="#0d1117" stroke="#30363d" stroke-width="1.5"/>
+  <circle cx="30" cy="27" r="6.5" fill="#ff5f57"/>
+  <circle cx="52" cy="27" r="6.5" fill="#febc2e"/>
+  <circle cx="74" cy="27" r="6.5" fill="#28c840"/>
+  <text x="100" y="33" font-size="17" fill="#8b949e">zsh · starship prompt</text>
+  <line x1="0" y1="54" x2="900" y2="54" stroke="#21262d" stroke-width="1"/>
+  <!-- info line: dir on branch, with the run tagline appended -->
+  <text x="28" y="96" font-size="23" xml:space="preserve"><tspan fill="#79c0ff">~/Code/anesthify</tspan><tspan fill="#6e7681"> on </tspan><tspan fill="#d2a8ff">main</tspan></text>
+  <path d="M430 85 L443 95 L430 105 Z" fill="#6e7681"/>
+  <text x="452" y="103" font-size="23" xml:space="preserve"><tspan fill="#56d4dd">pnpm dev</tspan><tspan fill="#6e7681"> · </tspan><tspan fill="#56d4dd">:5173</tspan></text>
+  <!-- prompt line -->
+  <text x="28" y="140" font-size="23" xml:space="preserve" fill="#7ee787">❯ <tspan fill="#6e7681">▍</tspan></text>
+</svg>

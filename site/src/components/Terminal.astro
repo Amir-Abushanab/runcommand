@@ -1,0 +1,55 @@
+---
+interface Props {
+  title?: string;
+  caption?: string;
+}
+const { title = "", caption } = Astro.props;
+---
+<figure class="term-fig">
+  <div class="term">
+    <div class="term-bar" aria-hidden="true">
+      <span class="dots"><i></i><i></i><i></i></span>
+      <span class="term-title">{title}</span>
+    </div>
+    <pre class="term-body"><slot /></pre>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<style>
+  .term-fig { margin: 0; display: grid; gap: 0.6rem; }
+  .term {
+    color-scheme: dark;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 18px 50px -24px rgb(0 0 0 / 0.65);
+  }
+  .term-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.8rem;
+    background: #161b22;
+    border-block-end: 1px solid #30363d;
+  }
+  .dots { display: inline-flex; gap: 6px; }
+  .dots i { inline-size: 11px; block-size: 11px; border-radius: 50%; background: #3a4048; }
+  .dots i:nth-child(1) { background: #ff5f57; }
+  .dots i:nth-child(2) { background: #febc2e; }
+  .dots i:nth-child(3) { background: #28c840; }
+  .term-title { color: #8b949e; font-size: 0.8rem; font-family: var(--mono); }
+  .term-body {
+    container-type: inline-size;
+    margin: 0;
+    padding: 1rem 1.15rem;
+    color: #c9d1d9;
+    font-family: var(--mono);
+    font-size: clamp(0.78rem, 2.6cqi, 0.95rem);
+    line-height: 1.75;
+    white-space: pre-wrap;
+    overflow-x: auto;
+  }
+  figcaption { color: var(--muted); font-size: 0.85rem; padding-inline: 0.2rem; }
+</style>

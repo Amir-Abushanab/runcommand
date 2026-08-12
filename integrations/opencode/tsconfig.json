@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    // Solid's JSX is transformed by the loader (Bun/OpenCode), not tsc — the
+    // runtime is OpenTUI's renderer, so tsc only needs to type it.
+    "jsx": "preserve",
+    "jsxImportSource": "@opentui/solid"
+  },
+  "include": ["*.tsx", "*.ts"]
+}

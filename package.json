@@ -1,0 +1,28 @@
+{
+  "name": "runcommand",
+  "version": "0.1.0",
+  "description": "Show each project's run/dev command in the Claude Code status bar. LLM-detected once, cached per-project.",
+  "type": "module",
+  "bin": {
+    "runcommand": "bin/runcommand.mjs"
+  },
+  "files": [
+    "bin"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "detect": "node bin/runcommand.mjs detect",
+    "statusline": "node bin/runcommand.mjs statusline"
+  },
+  "keywords": [
+    "claude-code",
+    "statusline",
+    "status-line",
+    "run-command",
+    "dev-command"
+  ],
+  "license": "MIT",
+  "packageManager": "pnpm@11.18.0"
+}

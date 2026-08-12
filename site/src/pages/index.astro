@@ -1,0 +1,307 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Terminal from "../components/Terminal.astro";
+
+const repo = "https://github.com/amir-abushanab/runcommand";
+
+const features = [
+  { icon: "◆", title: "LLM-detected", body: "A quick claude -p call reads your package.json scripts, lockfile and manifests to figure out the real dev command — pnpm dev, yarn dev, cargo run, docker compose up." },
+  { icon: "⚡", title: "Instant & cached", body: "Detected once, cached per project. The status line render is a ~50ms cache read; detection runs in the background, never blocking." },
+  { icon: "↻", title: "Self-healing", body: "The cache is keyed to a fingerprint of your manifests. Edit a Makefile target or package.json script and it re-detects on the next render — no command to remember." },
+  { icon: "◉", title: "Live ports", body: "Shows the localhost servers actually running for this project (scoped by process working dir), as clickable links. Databases and other projects don't leak in." },
+  { icon: "▤", title: "Multi-surface", body: "One CLI, every surface: Claude Code, starship, OpenCode, Qwen Code — and Codex the moment it ships a status-line hook." },
+  { icon: "✦", title: "Colorblind-safe", body: "Each service in a monorepo gets its own colour from a colorblind-safe palette; labels disambiguate even when colours can't." },
+];
+
+const steps = [
+  { n: "1", title: "Detect", body: "claude -p reads the project's signals and returns the single dev/run command (or several, for a monorepo)." },
+  { n: "2", title: "Cache", body: "Saved per project under ~/.cache/runcommand, keyed to a hash of the manifests that define it." },
+  { n: "3", title: "Serve", body: "Status lines & prompts read the cache instantly; live ports come from a short-cached lsof scan." },
+  { n: "4", title: "Self-heal", body: "Change a manifest → the fingerprint changes → a background re-detect refreshes the answer." },
+];
+
+const commands = [
+  ["statusline", "Render the run command + live ports (Claude Code / Qwen Code call this)"],
+  ["prompt", "Plain run command for a shell prompt — non-blocking"],
+  ["promptline", "Run command + clickable ports, styled (starship module)"],
+  ["ports", "This project's live localhost ports  ·  --links --urls --json --all"],
+  ["json", "Structured { commands, ports } for plugins (the OpenCode plugin uses this)"],
+  ["detect", "Detect now (calls claude -p), print + cache"],
+  ["get", "Print the cached command (detect if missing)"],
+  ["refresh", "Re-detect  ·  --hint \"what's wrong\" to steer, --clear-hint to reset"],
+  ["path", "Print the cache file path for a project"],
+];
+---
+
+<Layout
+  title="runcommand — your project's run command, in the status bar"
+  description="A tiny, dependency-free CLI that detects each project's run command and shows it — with live clickable localhost ports — in your Claude Code status bar, shell prompt, and more."
+>
+  <header class="nav">
+    <div class="wrap nav-in">
+      <a class="brand" href="#top"><span class="brand-mark">▶</span> runcommand</a>
+      <nav class="nav-links">
+        <a href="#how">How it works</a>
+        <a href="#surfaces">Surfaces</a>
+        <a href="#commands">Commands</a>
+        <a href={repo} rel="noopener">GitHub ↗</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- HERO -->
+    <section class="hero">
+      <div class="wrap hero-in">
+        <div class="hero-copy">
+          <p class="eyebrow">CLI · status line · prompt</p>
+          <h1>Never hunt for the run command again.</h1>
+          <p class="lead">
+            Juggling a dozen repos? <strong>runcommand</strong> figures out how to start each
+            one — <code>pnpm dev</code>, <code>cargo run</code>, <code>docker compose up</code> —
+            and shows it, next to the localhost ports it's actually serving, right in your
+            status bar and prompt.
+          </p>
+          <div class="cta">
+            <a class="btn btn-primary" href="#how">See how it works</a>
+            <a class="btn btn-ghost" href={repo} rel="noopener">View on GitHub ↗</a>
+          </div>
+          <div class="install">
+            <code id="install-cmd">runcommand statusline</code>
+            <button class="copy" type="button" data-copy-target="install-cmd" aria-label="Copy command">Copy</button>
+          </div>
+          <p class="install-note">Point Claude Code's <code>statusLine.command</code> at it. Zero dependencies — just Node + the <code>claude</code> CLI.</p>
+        </div>
+
+        <div class="hero-demo">
+          <Terminal title="Claude Code · status bar" caption="The line it adds, beneath your existing status line.">
+<span class="ln"><span class="dim">◆ opus · anesthify · 42%</span></span>
+<span class="ln"><span class="dim">▶</span> <span class="cyan">pnpm dev</span>  <span class="dim">◉</span> <a href="http://localhost:3000">:3000</a> <a href="http://localhost:5173">:5173</a></span>
+          </Terminal>
+        </div>
+      </div>
+    </section>
+
+    <!-- FEATURES -->
+    <section class="features">
+      <div class="wrap">
+        <p class="eyebrow">Why</p>
+        <h2>Small tool, exactly one job — done well.</h2>
+        <ul class="cards" role="list">
+          {features.map((f) => (
+            <li class="card">
+              <span class="card-icon" aria-hidden="true">{f.icon}</span>
+              <h3>{f.title}</h3>
+              <p>{f.body}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section id="how" class="how">
+      <div class="wrap">
+        <p class="eyebrow">How it works</p>
+        <h2>Detect once, cache, serve instantly, self-heal.</h2>
+        <p class="lead">The status line never waits on the model. Detection is a background job behind a content-addressed cache.</p>
+        <ol class="flow" role="list">
+          {steps.map((s) => (
+            <li class="step">
+              <span class="step-n" aria-hidden="true">{s.n}</span>
+              <h3>{s.title}</h3>
+              <p>{s.body}</p>
+            </li>
+          ))}
+        </ol>
+
+        <div class="how-demos">
+          <Terminal title="zsh · steering a wrong guess">
+<span class="ln"><span class="green">❯</span> <span class="white">runcommand get</span></span>
+<span class="ln"><span class="cyan">pnpm dev</span></span>
+<span class="ln"><span class="green">❯</span> <span class="white">runcommand refresh --hint </span><span class="yellow">"it's the web app, not the api"</span></span>
+<span class="ln"><span class="cyan">pnpm run dev:web</span>   <span class="comment"># note saved — future re-detects won't regress</span></span>
+          </Terminal>
+          <Terminal title="pin it exactly · .claude-run">
+<span class="ln"><span class="comment"># one command per line, optional label:</span></span>
+<span class="ln"><span class="white">web:</span> pnpm dev:web</span>
+<span class="ln"><span class="white">api:</span> pnpm dev:api</span>
+          </Terminal>
+        </div>
+      </div>
+    </section>
+
+    <!-- SURFACES -->
+    <section id="surfaces" class="surfaces">
+      <div class="wrap">
+        <p class="eyebrow">Surfaces</p>
+        <h2>The same answer, wherever you look.</h2>
+        <p class="lead">One CLI speaking Claude Code's <code>statusLine</code> contract (JSON in, a line out) — reused by everything that copied it, plus a native OpenCode plugin.</p>
+
+        <div class="surface-grid">
+          <Terminal title="starship · shell prompt" caption="A right-aligned tagline; ports clickable via OSC 8.">
+<span class="ln"><span class="row"><span><span class="magenta">~/Code/anesthify</span> <span class="dim">on</span> <span class="blue"> main</span></span><span><span class="dim">▶</span> <span class="cyan">pnpm dev</span> <span class="dim">·</span> <a href="http://localhost:5173">:5173</a></span></span></span>
+<span class="ln"><span class="green">❯</span> <span class="dim">▍</span></span>
+          </Terminal>
+
+          <Terminal title="OpenCode · TUI footer" caption="A native Solid plugin rendering into app_bottom.">
+<span class="ln"><span class="dim">◍ claude-sonnet · 18% · 2m04s</span></span>
+<span class="ln"><span class="dim">▶</span> <span class="cyan">pnpm dev</span>  <span class="dim">◉</span> <a href="http://localhost:3000">:3000</a></span>
+          </Terminal>
+
+          <Terminal title="monorepo · distinct services" caption="Each service its own colour + label.">
+<span class="ln"><span class="dim">▶</span> <span class="dim">web:</span> <span class="cyan">pnpm dev:web</span> <span class="dim">·</span> <span class="dim">api:</span> <span class="magenta">pnpm dev:api</span> <span class="dim">·</span> <span class="dim">worker:</span> <span class="green">pnpm dev:worker</span></span>
+          </Terminal>
+
+          <Terminal title="first visit · non-blocking" caption="A placeholder while the background detect runs.">
+<span class="ln"><span class="dim">◆ opus · new-thing · 88%</span></span>
+<span class="ln"><span class="dim">▶ finding run command…</span></span>
+          </Terminal>
+        </div>
+
+        <p class="surface-foot">
+          Also drops into <strong>Qwen Code</strong> (same contract) and is a one-block paste for
+          <strong>Codex</strong> the day <a href="https://github.com/openai/codex/issues/17827" rel="noopener">#17827</a> ships.
+        </p>
+      </div>
+    </section>
+
+    <!-- COMMANDS -->
+    <section id="commands" class="commands">
+      <div class="wrap">
+        <p class="eyebrow">Reference</p>
+        <h2>Commands</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th scope="col">Command</th><th scope="col">What it does</th></tr>
+            </thead>
+            <tbody>
+              {commands.map(([cmd, desc]) => (
+                <tr>
+                  <td><code>runcommand {cmd}</code></td>
+                  <td>{desc}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p class="lead" style="margin-block-start:1.5rem">
+          Overrides that skip the model entirely: a <code>.claude-run</code> file, or a
+          <code>Run:</code> line in <code>CLAUDE.md</code>. Tunable via env —
+          <code>RUNCOMMAND_MODEL</code>, <code>RUNCOMMAND_PORT_STYLE</code>,
+          <code>RUNCOMMAND_COLORS</code>, <code>NO_COLOR</code>.
+        </p>
+      </div>
+    </section>
+
+    <footer class="foot">
+      <div class="wrap foot-in">
+        <span><span class="brand-mark">▶</span> runcommand</span>
+        <span class="foot-links">
+          <a href={repo} rel="noopener">GitHub</a>
+          <a href="#top">Back to top ↑</a>
+        </span>
+      </div>
+    </footer>
+  </main>
+
+  <script is:inline>
+    document.querySelectorAll(".copy").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const el = document.getElementById(btn.getAttribute("data-copy-target"));
+        if (!el) return;
+        try {
+          await navigator.clipboard.writeText(el.textContent.trim());
+          const prev = btn.textContent;
+          btn.textContent = "Copied ✓";
+          setTimeout(() => (btn.textContent = prev), 1400);
+        } catch {}
+      });
+    });
+  </script>
+
+  <style>
+    /* nav */
+    .nav {
+      position: sticky; inset-block-start: 0; z-index: 10;
+      background: color-mix(in oklab, var(--bg) 82%, transparent);
+      backdrop-filter: blur(10px);
+      border-block-end: 1px solid var(--border);
+    }
+    .nav-in { display: flex; align-items: center; justify-content: space-between; padding-block: 0.7rem; }
+    .brand { font-weight: 700; text-decoration: none; color: var(--text); display: inline-flex; align-items: center; gap: 0.5ch; }
+    .brand-mark { color: var(--accent); }
+    .nav-links { display: flex; gap: clamp(0.7rem, 3vw, 1.6rem); align-items: center; flex-wrap: wrap; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.92rem; }
+    .nav-links a:hover { color: var(--text); }
+
+    /* hero */
+    .hero { padding-block: clamp(2.5rem, 8vw, 5rem); }
+    .hero-in { display: grid; gap: clamp(2rem, 5vw, 3.5rem); align-items: center; }
+    @media (min-width: 900px) { .hero-in { grid-template-columns: 1.05fr 0.95fr; } }
+    h1 { font-size: clamp(2.1rem, 6vw, 3.6rem); margin-block-end: 1rem; }
+    .cta { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-block: 1.5rem; }
+    .install {
+      display: flex; align-items: center; gap: 0.5rem;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 0.5rem 0.5rem 0.5rem 0.9rem;
+      max-inline-size: 100%;
+    }
+    .install code { font-family: var(--mono); font-size: 0.85rem; color: var(--text); overflow-x: auto; white-space: nowrap; min-inline-size: 0; }
+    .copy {
+      margin-inline-start: auto; flex: none;
+      font: 600 0.8rem/1 var(--font); cursor: pointer;
+      background: var(--surface-2); color: var(--text);
+      border: 1px solid var(--border); border-radius: 7px; padding: 0.45rem 0.7rem;
+    }
+    .copy:hover { border-color: var(--accent); }
+    .install-note { color: var(--muted); font-size: 0.85rem; margin-block-start: 0.7rem; }
+    .hero code, .install-note code, .lead code, .commands code, .surface-foot code {
+      font-family: var(--mono); font-size: 0.86em;
+      background: var(--surface-2); padding: 0.1em 0.4em; border-radius: 5px;
+    }
+
+    /* features */
+    .features h2, .how h2, .surfaces h2, .commands h2 { font-size: clamp(1.6rem, 3.5vw, 2.3rem); margin-block: 0.4rem 1.5rem; }
+    .cards { list-style: none; padding: 0; display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.3rem; }
+    .card-icon { color: var(--accent); font-size: 1.4rem; }
+    .card h3 { font-size: 1.05rem; margin-block: 0.6rem 0.35rem; }
+    .card p { color: var(--muted); font-size: 0.95rem; }
+
+    /* how */
+    .how { background: var(--surface); border-block: 1px solid var(--border); }
+    .flow { list-style: none; padding: 0; margin-block: 2rem; display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    .step { position: relative; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.3rem; }
+    .step-n {
+      display: grid; place-content: center; inline-size: 2rem; block-size: 2rem;
+      border-radius: 50%; background: var(--accent); color: var(--accent-ink);
+      font-weight: 700; font-family: var(--mono); margin-block-end: 0.7rem;
+    }
+    .step h3 { font-size: 1.05rem; margin-block-end: 0.3rem; }
+    .step p { color: var(--muted); font-size: 0.93rem; }
+    .how-demos { display: grid; gap: 1.2rem; margin-block-start: 2rem; }
+    @media (min-width: 780px) { .how-demos { grid-template-columns: 1.3fr 1fr; align-items: start; } }
+
+    /* surfaces */
+    .surface-grid { display: grid; gap: 1.3rem; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); margin-block-start: 1.5rem; }
+    .surface-foot { color: var(--muted); margin-block-start: 1.8rem; }
+    .surface-foot a { text-decoration: underline; }
+
+    /* commands */
+    .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+    table { border-collapse: collapse; inline-size: 100%; font-size: 0.95rem; }
+    th, td { text-align: start; padding: 0.8rem 1rem; border-block-end: 1px solid var(--border); vertical-align: top; }
+    thead th { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    tbody tr:last-child td { border-block-end: 0; }
+    td code { font-family: var(--mono); font-size: 0.88rem; color: var(--accent); white-space: nowrap; }
+
+    /* footer */
+    .foot { border-block-start: 1px solid var(--border); background: var(--surface); }
+    .foot-in { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; padding-block: 2rem; color: var(--muted); }
+    .foot-links { display: flex; gap: 1.2rem; }
+    .foot-links a { color: var(--muted); text-decoration: none; }
+    .foot-links a:hover { color: var(--text); }
+  </style>
+</Layout>

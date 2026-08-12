@@ -1,0 +1,13 @@
+# dependencies (incl. the symlinked OpenCode plugin deps)
+node_modules/
+
+# build output
+dist/
+.astro/
+
+# caches
+.cache/
+
+# logs / OS cruft
+*.log
+.DS_Store

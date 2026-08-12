@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="158" viewBox="0 0 900 158"
+     font-family="Menlo, 'SF Mono', SFMono-Regular, Consolas, monospace">
+  <rect x="1.5" y="1.5" width="897" height="155" rx="13" fill="#0d1117" stroke="#30363d" stroke-width="1.5"/>
+  <circle cx="30" cy="27" r="6.5" fill="#ff5f57"/>
+  <circle cx="52" cy="27" r="6.5" fill="#febc2e"/>
+  <circle cx="74" cy="27" r="6.5" fill="#28c840"/>
+  <text x="100" y="33" font-size="17" fill="#8b949e">Claude Code · status bar</text>
+  <line x1="0" y1="54" x2="900" y2="54" stroke="#21262d" stroke-width="1"/>
+  <text x="28" y="98" font-size="23" fill="#7d8590">◆ opus · ~/Code/anesthify · 42%</text>
+  <path d="M30 121 L44 132 L30 143 Z" fill="#6e7681"/>
+  <text x="54" y="141" font-size="25" fill="#56d4dd">pnpm dev</text>
+  <circle cx="196" cy="132" r="7" fill="none" stroke="#6e7681" stroke-width="2.5"/>
+  <circle cx="196" cy="132" r="2.3" fill="#6e7681"/>
+  <text x="216" y="141" font-size="25" fill="#56d4dd">:3000  :5173</text>
+</svg>
