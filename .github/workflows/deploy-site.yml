@@ -23,7 +23,8 @@ jobs:
       - uses: withastro/action@v3
         with:
           path: site
-          package-manager: pnpm@latest
+          # pnpm version comes from site/package.json's "packageManager" field.
+          # Don't also set package-manager here — the two conflict and fail the build.
 
   deploy:
     needs: build
