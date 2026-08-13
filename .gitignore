@@ -11,3 +11,6 @@ dist/
 # logs / OS cruft
 *.log
 .DS_Store
+
+# stray root lockfile (this package is zero-dep; site/ keeps its own)
+/pnpm-lock.yaml

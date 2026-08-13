@@ -29,8 +29,8 @@ Code's status-line contract — so the same answer drops into **starship**,
 **OpenCode**, **Qwen Code**, and more, and coexists with whatever already draws
 your status line (see [Coexisting](#coexisting-with-another-status-line)).
 
-> 🌐 **Showcase:** the [`site/`](site/) directory is an Astro page that deploys to
-> `https://amir-abushanab.github.io/runcommand/`.
+> 🌐 **Showcase:** the [`site/`](site/) directory is an Astro page (run it locally
+> with `pnpm site`) that deploys to `https://amir-abushanab.github.io/runcommand/`.
 
 **Jump to:** [Install](#install) · [Claude Code](#wire-it-into-claude-code) · [Live ports](#live-localhost-ports) · [Shell prompt](#shell-prompt-starship) · [Other surfaces](#other-agents-and-prompts) · [Commands](#commands) · [Config](#config-env-vars) · [How it works](#how-detection-works)
 

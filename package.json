@@ -14,7 +14,8 @@
   },
   "scripts": {
     "detect": "node bin/runcommand.mjs detect",
-    "statusline": "node bin/runcommand.mjs statusline"
+    "statusline": "node bin/runcommand.mjs statusline",
+    "site": "pnpm --dir site dev"
   },
   "keywords": [
     "claude-code",

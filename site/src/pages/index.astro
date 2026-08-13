@@ -3,26 +3,27 @@ import Layout from "../layouts/Layout.astro";
 import Terminal from "../components/Terminal.astro";
 
 const repo = "https://github.com/amir-abushanab/runcommand";
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 const features = [
-  { icon: "◆", title: "LLM-detected", body: "A quick claude -p call reads your package.json scripts, lockfile and manifests to figure out the real dev command — pnpm dev, yarn dev, cargo run, docker compose up." },
-  { icon: "⚡", title: "Instant & cached", body: "Detected once, cached per project. The status line render is a ~50ms cache read; detection runs in the background, never blocking." },
-  { icon: "↻", title: "Self-healing", body: "The cache is keyed to a fingerprint of your manifests. Edit a Makefile target or package.json script and it re-detects on the next render — no command to remember." },
-  { icon: "◉", title: "Live ports", body: "Shows the localhost servers actually running for this project (scoped by process working dir), as clickable links. Databases and other projects don't leak in." },
-  { icon: "▤", title: "Multi-surface", body: "One CLI, every surface: Claude Code, starship, OpenCode, Qwen Code — and Codex the moment it ships a status-line hook." },
-  { icon: "✦", title: "Colorblind-safe", body: "Each service in a monorepo gets its own colour from a colorblind-safe palette; labels disambiguate even when colours can't." },
+  { icon: "◆", title: "LLM-detected", body: "A quick claude -p call reads your package.json scripts, lockfile and manifests to work out the real dev command: pnpm dev, yarn dev, cargo run, docker compose up." },
+  { icon: "⚡", title: "Cached, never blocking", body: "Detected once, then cached per project. The status line is a ~50ms cache read; detection runs in the background." },
+  { icon: "↻", title: "Self-healing", body: "The cache is keyed to a fingerprint of your manifests. Edit a Makefile target or a package.json script and it re-detects on the next render. Nothing to remember." },
+  { icon: "◉", title: "Live ports", body: "Shows the localhost servers actually running for this project, scoped by process working dir, as clickable links. Databases and other projects don't leak in." },
+  { icon: "▤", title: "Runs everywhere", body: "One CLI across Claude Code, starship, OpenCode, and Qwen Code, plus Codex once it ships a status-line hook." },
+  { icon: "✦", title: "Colorblind-safe", body: "Each service in a monorepo gets its own colour from a colorblind-safe palette. Labels tell them apart even when the colours can't." },
 ];
 
 const steps = [
-  { n: "1", title: "Detect", body: "claude -p reads the project's signals and returns the single dev/run command (or several, for a monorepo)." },
+  { n: "1", title: "Detect", body: "claude -p reads the project's signals and returns the dev/run command (or several, for a monorepo)." },
   { n: "2", title: "Cache", body: "Saved per project under ~/.cache/runcommand, keyed to a hash of the manifests that define it." },
-  { n: "3", title: "Serve", body: "Status lines & prompts read the cache instantly; live ports come from a short-cached lsof scan." },
-  { n: "4", title: "Self-heal", body: "Change a manifest → the fingerprint changes → a background re-detect refreshes the answer." },
+  { n: "3", title: "Serve", body: "Status lines and prompts read the cache instantly; live ports come from a short-cached lsof scan." },
+  { n: "4", title: "Self-heal", body: "Change a manifest, the fingerprint changes, and a background re-detect refreshes the answer." },
 ];
 
 const commands = [
   ["statusline", "Render the run command + live ports (Claude Code / Qwen Code call this)"],
-  ["prompt", "Plain run command for a shell prompt — non-blocking"],
+  ["prompt", "Plain run command for a shell prompt (non-blocking)"],
   ["promptline", "Run command + clickable ports, styled (starship module)"],
   ["ports", "This project's live localhost ports  ·  --links --urls --json --all"],
   ["json", "Structured { commands, ports } for plugins (the OpenCode plugin uses this)"],
@@ -31,11 +32,26 @@ const commands = [
   ["refresh", "Re-detect  ·  --hint \"what's wrong\" to steer, --clear-hint to reset"],
   ["path", "Print the cache file path for a project"],
 ];
+
+const terminals = [
+  { slug: "ghostty", name: "Ghostty" },
+  { slug: "iterm2", name: "iTerm2" },
+  { slug: "wezterm", name: "WezTerm" },
+  { slug: "kitty", name: "kitty" },
+  { slug: "alacritty", name: "Alacritty" },
+  { slug: "warp", name: "Warp" },
+  { slug: "windowsterminal", name: "Windows Terminal" },
+  { slug: "visualstudiocode", name: "VS Code" },
+  { slug: "gnometerminal", name: "GNOME Terminal" },
+  { slug: "apple", name: "Apple Terminal" },
+];
+
+const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 014 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48l-.01 2.2c0 .21.15.46.55.38A8 8 0 008 .2z";
 ---
 
 <Layout
-  title="runcommand — your project's run command, in the status bar"
-  description="A tiny, dependency-free CLI that detects each project's run command and shows it — with live clickable localhost ports — in your Claude Code status bar, shell prompt, and more."
+  title="runcommand: your project's run command, in the status bar"
+  description="A tiny, dependency-free CLI that detects each project's run command and shows it, with live clickable localhost ports, in your Claude Code status bar, shell prompt, and more."
 >
   <header class="nav">
     <div class="wrap nav-in">
@@ -43,8 +59,12 @@ const commands = [
       <nav class="nav-links">
         <a href="#how">How it works</a>
         <a href="#surfaces">Surfaces</a>
+        <a href="#compat">Terminals</a>
         <a href="#commands">Commands</a>
-        <a href={repo} rel="noopener">GitHub ↗</a>
+        <a href={repo} rel="noopener" class="nav-gh">
+          <svg class="gh-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><path d={GH_PATH} /></svg>
+          GitHub
+        </a>
       </nav>
     </div>
   </header>
@@ -54,23 +74,25 @@ const commands = [
     <section class="hero">
       <div class="wrap hero-in">
         <div class="hero-copy">
-          <p class="eyebrow">CLI · status line · prompt</p>
           <h1>Never hunt for the run command again.</h1>
           <p class="lead">
-            Juggling a dozen repos? <strong>runcommand</strong> figures out how to start each
-            one — <code>pnpm dev</code>, <code>cargo run</code>, <code>docker compose up</code> —
-            and shows it, next to the localhost ports it's actually serving, right in your
+            Juggling a dozen repos? <strong>runcommand</strong> works out how to start each
+            one (<code>pnpm dev</code>, <code>cargo run</code>, <code>docker compose up</code>)
+            and shows it next to the localhost ports it's actually serving, right in your
             status bar and prompt.
           </p>
           <div class="cta">
             <a class="btn btn-primary" href="#how">See how it works</a>
-            <a class="btn btn-ghost" href={repo} rel="noopener">View on GitHub ↗</a>
+            <a class="btn btn-ghost" href={repo} rel="noopener">
+              <svg class="gh-icon" viewBox="0 0 16 16" width="18" height="18" aria-hidden="true" fill="currentColor"><path d={GH_PATH} /></svg>
+              View on GitHub
+            </a>
           </div>
           <div class="install">
             <code id="install-cmd">runcommand statusline</code>
             <button class="copy" type="button" data-copy-target="install-cmd" aria-label="Copy command">Copy</button>
           </div>
-          <p class="install-note">Point Claude Code's <code>statusLine.command</code> at it. Zero dependencies — just Node + the <code>claude</code> CLI.</p>
+          <p class="install-note">Point Claude Code's <code>statusLine.command</code> at it. Zero dependencies: just Node and the <code>claude</code> CLI.</p>
         </div>
 
         <div class="hero-demo">
@@ -85,8 +107,8 @@ const commands = [
     <!-- FEATURES -->
     <section class="features">
       <div class="wrap">
-        <p class="eyebrow">Why</p>
-        <h2>Small tool, exactly one job — done well.</h2>
+        <p class="eyebrow">Features</p>
+        <h2>What it does</h2>
         <ul class="cards" role="list">
           {features.map((f) => (
             <li class="card">
@@ -103,7 +125,7 @@ const commands = [
     <section id="how" class="how">
       <div class="wrap">
         <p class="eyebrow">How it works</p>
-        <h2>Detect once, cache, serve instantly, self-heal.</h2>
+        <h2>Detect once, cache, serve, self-heal.</h2>
         <p class="lead">The status line never waits on the model. Detection is a background job behind a content-addressed cache.</p>
         <ol class="flow" role="list">
           {steps.map((s) => (
@@ -120,7 +142,7 @@ const commands = [
 <span class="ln"><span class="green">❯</span> <span class="white">runcommand get</span></span>
 <span class="ln"><span class="cyan">pnpm dev</span></span>
 <span class="ln"><span class="green">❯</span> <span class="white">runcommand refresh --hint </span><span class="yellow">"it's the web app, not the api"</span></span>
-<span class="ln"><span class="cyan">pnpm run dev:web</span>   <span class="comment"># note saved — future re-detects won't regress</span></span>
+<span class="ln"><span class="cyan">pnpm run dev:web</span>   <span class="comment"># saved, so re-detects won't regress</span></span>
           </Terminal>
           <Terminal title="pin it exactly · .claude-run">
 <span class="ln"><span class="comment"># one command per line, optional label:</span></span>
@@ -136,7 +158,7 @@ const commands = [
       <div class="wrap">
         <p class="eyebrow">Surfaces</p>
         <h2>The same answer, wherever you look.</h2>
-        <p class="lead">One CLI speaking Claude Code's <code>statusLine</code> contract (JSON in, a line out) — reused by everything that copied it, plus a native OpenCode plugin.</p>
+        <p class="lead">One CLI speaking Claude Code's <code>statusLine</code> contract (JSON in, a line out). Everything that copied that contract gets it for free, plus a native OpenCode plugin.</p>
 
         <div class="surface-grid">
           <Terminal title="starship · shell prompt" caption="A right-aligned tagline; ports clickable via OSC 8.">
@@ -149,7 +171,7 @@ const commands = [
 <span class="ln"><span class="dim">▶</span> <span class="cyan">pnpm dev</span>  <span class="dim">◉</span> <a href="http://localhost:3000">:3000</a></span>
           </Terminal>
 
-          <Terminal title="monorepo · distinct services" caption="Each service its own colour + label.">
+          <Terminal title="monorepo · distinct services" caption="Each service its own colour and label.">
 <span class="ln"><span class="dim">▶</span> <span class="dim">web:</span> <span class="cyan">pnpm dev:web</span> <span class="dim">·</span> <span class="dim">api:</span> <span class="magenta">pnpm dev:api</span> <span class="dim">·</span> <span class="dim">worker:</span> <span class="green">pnpm dev:worker</span></span>
           </Terminal>
 
@@ -162,6 +184,28 @@ const commands = [
         <p class="surface-foot">
           Also drops into <strong>Qwen Code</strong> (same contract) and is a one-block paste for
           <strong>Codex</strong> the day <a href="https://github.com/openai/codex/issues/17827" rel="noopener">#17827</a> ships.
+        </p>
+      </div>
+    </section>
+
+    <!-- COMPATIBILITY -->
+    <section id="compat" class="compat">
+      <div class="wrap">
+        <p class="eyebrow">Compatibility</p>
+        <h2>Clickable in your terminal</h2>
+        <p class="lead">The ports are real links. They open on ⌘-click (or your terminal's link modifier) anywhere OSC 8 hyperlinks are supported:</p>
+        <ul class="logos" role="list">
+          {terminals.map((t) => (
+            <li class="logo-item">
+              <img src={`${base}/logos/${t.slug}.svg`} alt="" width="30" height="30" loading="lazy" />
+              <span>{t.name}</span>
+            </li>
+          ))}
+        </ul>
+        <p class="compat-note">
+          Apple Terminal has no OSC 8, so runcommand's <code>url</code> port style prints the
+          full <code>http://localhost:PORT</code>, which stays ⌘-clickable there. Konsole, foot,
+          and any other terminal with OSC 8 support work too.
         </p>
       </div>
     </section>
@@ -188,9 +232,9 @@ const commands = [
         </div>
         <p class="lead" style="margin-block-start:1.5rem">
           Overrides that skip the model entirely: a <code>.claude-run</code> file, or a
-          <code>Run:</code> line in <code>CLAUDE.md</code>. Tunable via env —
+          <code>Run:</code> line in <code>CLAUDE.md</code>. Tunable via env vars like
           <code>RUNCOMMAND_MODEL</code>, <code>RUNCOMMAND_PORT_STYLE</code>,
-          <code>RUNCOMMAND_COLORS</code>, <code>NO_COLOR</code>.
+          <code>RUNCOMMAND_COLORS</code>, and <code>NO_COLOR</code>.
         </p>
       </div>
     </section>
@@ -235,6 +279,8 @@ const commands = [
     .nav-links { display: flex; gap: clamp(0.7rem, 3vw, 1.6rem); align-items: center; flex-wrap: wrap; }
     .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.92rem; }
     .nav-links a:hover { color: var(--text); }
+    .nav-gh { display: inline-flex; align-items: center; gap: 0.4ch; }
+    .gh-icon { vertical-align: -0.18em; flex: none; }
 
     /* hero */
     .hero { padding-block: clamp(2.5rem, 8vw, 5rem); }
@@ -242,6 +288,7 @@ const commands = [
     @media (min-width: 900px) { .hero-in { grid-template-columns: 1.05fr 0.95fr; } }
     h1 { font-size: clamp(2.1rem, 6vw, 3.6rem); margin-block-end: 1rem; }
     .cta { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-block: 1.5rem; }
+    .btn .gh-icon { margin-inline-end: 0.15rem; }
     .install {
       display: flex; align-items: center; gap: 0.5rem;
       background: var(--surface); border: 1px solid var(--border);
@@ -257,13 +304,15 @@ const commands = [
     }
     .copy:hover { border-color: var(--accent); }
     .install-note { color: var(--muted); font-size: 0.85rem; margin-block-start: 0.7rem; }
-    .hero code, .install-note code, .lead code, .commands code, .surface-foot code {
+    .hero code, .install-note code, .lead code, .commands code, .surface-foot code, .compat-note code {
       font-family: var(--mono); font-size: 0.86em;
       background: var(--surface-2); padding: 0.1em 0.4em; border-radius: 5px;
     }
 
+    /* section headings */
+    .features h2, .how h2, .surfaces h2, .commands h2, .compat h2 { font-size: clamp(1.6rem, 3.5vw, 2.3rem); margin-block: 0.4rem 1.5rem; }
+
     /* features */
-    .features h2, .how h2, .surfaces h2, .commands h2 { font-size: clamp(1.6rem, 3.5vw, 2.3rem); margin-block: 0.4rem 1.5rem; }
     .cards { list-style: none; padding: 0; display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.3rem; }
     .card-icon { color: var(--accent); font-size: 1.4rem; }
@@ -288,6 +337,15 @@ const commands = [
     .surface-grid { display: grid; gap: 1.3rem; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); margin-block-start: 1.5rem; }
     .surface-foot { color: var(--muted); margin-block-start: 1.8rem; }
     .surface-foot a { text-decoration: underline; }
+
+    /* compatibility */
+    .logos { list-style: none; padding: 0; margin-block: 1.6rem; display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); }
+    .logo-item { display: flex; flex-direction: column; align-items: center; gap: 0.65rem; padding: 1.3rem 0.5rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+    .logo-item img { filter: brightness(0) invert(0.35); opacity: 0.85; transition: opacity 0.12s ease; }
+    .logo-item:hover img { opacity: 1; }
+    .logo-item span { color: var(--muted); font-size: 0.82rem; text-align: center; }
+    @media (prefers-color-scheme: dark) { .logo-item img { filter: brightness(0) invert(0.72); } }
+    .compat-note { color: var(--muted); font-size: 0.92rem; max-inline-size: 72ch; }
 
     /* commands */
     .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
