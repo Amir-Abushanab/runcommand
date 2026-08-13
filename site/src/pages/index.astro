@@ -33,17 +33,19 @@ const commands = [
   ["path", "Print the cache file path for a project"],
 ];
 
+// color = brand colour shown on hover; near-black brands fall back to the theme
+// text colour so they stay visible. osc8: false marks terminals without OSC 8.
 const terminals = [
-  { slug: "ghostty", name: "Ghostty" },
-  { slug: "iterm2", name: "iTerm2" },
-  { slug: "wezterm", name: "WezTerm" },
-  { slug: "kitty", name: "kitty" },
-  { slug: "alacritty", name: "Alacritty" },
-  { slug: "warp", name: "Warp" },
-  { slug: "windowsterminal", name: "Windows Terminal" },
-  { slug: "visualstudiocode", name: "VS Code" },
-  { slug: "gnometerminal", name: "GNOME Terminal" },
-  { slug: "apple", name: "Apple Terminal" },
+  { slug: "ghostty", name: "Ghostty", color: "#3551F3" },
+  { slug: "iterm2", name: "iTerm2", color: "var(--text)" },
+  { slug: "wezterm", name: "WezTerm", color: "#4E49EE" },
+  { slug: "kitty", name: "kitty", color: "#C0C81F" },
+  { slug: "alacritty", name: "Alacritty", color: "#F46D01" },
+  { slug: "warp", name: "Warp", color: "#01A4FF" },
+  { slug: "windowsterminal", name: "Windows Terminal", color: "#4CC2FF" },
+  { slug: "visualstudiocode", name: "VS Code", color: "#0098FF" },
+  { slug: "gnometerminal", name: "GNOME Terminal", color: "var(--text)" },
+  { slug: "apple", name: "Apple Terminal", color: "var(--text)", osc8: false },
 ];
 
 const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 014 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48l-.01 2.2c0 .21.15.46.55.38A8 8 0 008 .2z";
@@ -59,7 +61,6 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
       <nav class="nav-links">
         <a href="#how">How it works</a>
         <a href="#surfaces">Surfaces</a>
-        <a href="#compat">Terminals</a>
         <a href="#commands">Commands</a>
         <a href={repo} rel="noopener" class="nav-gh">
           <svg class="gh-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><path d={GH_PATH} /></svg>
@@ -181,31 +182,20 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
           </Terminal>
         </div>
 
-        <p class="surface-foot">
-          Also drops into <strong>Qwen Code</strong> (same contract) and is a one-block paste for
-          <strong>Codex</strong> the day <a href="https://github.com/openai/codex/issues/17827" rel="noopener">#17827</a> ships.
-        </p>
-      </div>
-    </section>
-
-    <!-- COMPATIBILITY -->
-    <section id="compat" class="compat">
-      <div class="wrap">
-        <p class="eyebrow">Compatibility</p>
-        <h2>Clickable in your terminal</h2>
-        <p class="lead">The ports are real links. They open on ⌘-click (or your terminal's link modifier) anywhere OSC 8 hyperlinks are supported:</p>
+        <h3 class="compat-h">Clickable in every terminal</h3>
+        <p class="lead">The ports are real links. ⌘-click (or your terminal's link modifier) opens them anywhere OSC 8 hyperlinks are supported. Hover a logo to see it in its colours:</p>
         <ul class="logos" role="list">
           {terminals.map((t) => (
             <li class="logo-item">
-              <img src={`${base}/logos/${t.slug}.svg`} alt="" width="30" height="30" loading="lazy" />
-              <span>{t.name}</span>
+              <span class="ico" style={`--logo:url("${base}/logos/${t.slug}.svg");--brand:${t.color}`}></span>
+              <span>{t.name}{t.osc8 === false ? "*" : ""}</span>
             </li>
           ))}
         </ul>
         <p class="compat-note">
-          Apple Terminal has no OSC 8, so runcommand's <code>url</code> port style prints the
-          full <code>http://localhost:PORT</code>, which stays ⌘-clickable there. Konsole, foot,
-          and any other terminal with OSC 8 support work too.
+          <strong>*</strong> Apple Terminal has no OSC 8, so runcommand's <code>url</code> port
+          style prints the full <code>http://localhost:PORT</code>, which stays ⌘-clickable there.
+          Konsole, foot, and any other terminal with OSC 8 support work too.
         </p>
       </div>
     </section>
@@ -304,13 +294,14 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
     }
     .copy:hover { border-color: var(--accent); }
     .install-note { color: var(--muted); font-size: 0.85rem; margin-block-start: 0.7rem; }
-    .hero code, .install-note code, .lead code, .commands code, .surface-foot code, .compat-note code {
+    .hero code, .install-note code, .lead code, .commands code, .compat-note code {
       font-family: var(--mono); font-size: 0.86em;
       background: var(--surface-2); padding: 0.1em 0.4em; border-radius: 5px;
     }
 
     /* section headings */
-    .features h2, .how h2, .surfaces h2, .commands h2, .compat h2 { font-size: clamp(1.6rem, 3.5vw, 2.3rem); margin-block: 0.4rem 1.5rem; }
+    .features h2, .how h2, .surfaces h2, .commands h2 { font-size: clamp(1.6rem, 3.5vw, 2.3rem); margin-block: 0.4rem 1.5rem; }
+    .compat-h { font-size: clamp(1.25rem, 2.6vw, 1.6rem); margin-block: 3.2rem 0.4rem; padding-block-start: 2.4rem; border-block-start: 1px solid var(--border); }
 
     /* features */
     .cards { list-style: none; padding: 0; display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
@@ -335,17 +326,21 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
 
     /* surfaces */
     .surface-grid { display: grid; gap: 1.3rem; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); margin-block-start: 1.5rem; }
-    .surface-foot { color: var(--muted); margin-block-start: 1.8rem; }
-    .surface-foot a { text-decoration: underline; }
 
-    /* compatibility */
+    /* compatibility (merged into surfaces) */
     .logos { list-style: none; padding: 0; margin-block: 1.6rem; display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); }
     .logo-item { display: flex; flex-direction: column; align-items: center; gap: 0.65rem; padding: 1.3rem 0.5rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
-    .logo-item img { filter: brightness(0) invert(0.35); opacity: 0.85; transition: opacity 0.12s ease; }
-    .logo-item:hover img { opacity: 1; }
+    .logo-item .ico {
+      inline-size: 30px; block-size: 30px; display: block;
+      background-color: var(--muted);
+      -webkit-mask: var(--logo) center / contain no-repeat;
+      mask: var(--logo) center / contain no-repeat;
+      transition: background-color 0.14s ease;
+    }
+    .logo-item:hover .ico { background-color: var(--brand); }
     .logo-item span { color: var(--muted); font-size: 0.82rem; text-align: center; }
-    @media (prefers-color-scheme: dark) { .logo-item img { filter: brightness(0) invert(0.72); } }
     .compat-note { color: var(--muted); font-size: 0.92rem; max-inline-size: 72ch; }
+    .compat-note strong { color: var(--text); }
 
     /* commands */
     .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
