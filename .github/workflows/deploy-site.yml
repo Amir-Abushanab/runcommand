@@ -23,6 +23,8 @@ jobs:
       - uses: withastro/action@v3
         with:
           path: site
+          # pnpm@11 needs Node >= 22.13; the action defaults to Node 20.
+          node-version: 22
           # pnpm version comes from site/package.json's "packageManager" field.
           # Don't also set package-manager here — the two conflict and fail the build.
 
