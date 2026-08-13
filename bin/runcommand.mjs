@@ -653,8 +653,10 @@ async function main() {
       // Plain, non-blocking run command for a shell prompt (e.g. starship).
       const root = resolveTarget();
       const { commands } = currentCommands(root);
+      const text = commands.map((c) => (c.label ? c.label + ": " : "") + c.command).join(" · ");
       const nl = process.stdout.isTTY ? "\n" : "";
-      process.stdout.write(commands.map((c) => (c.label ? c.label + ": " : "") + c.command).join(" · ") + nl);
+      // Trailing space so a following prompt segment isn't squished. Empty stays empty.
+      process.stdout.write((text ? text + " " : "") + nl);
       break;
     }
     case "promptline": {
@@ -663,7 +665,10 @@ async function main() {
       const root = resolveTarget();
       const { commands } = currentCommands(root);
       const parts = [renderRunLine(commands, "ok"), renderPorts(getPorts(root), { style: "compact" })].filter(Boolean);
-      process.stdout.write(parts.join("  "));
+      const line = parts.join("  ");
+      // Trailing space so a following prompt segment (e.g. starship's cmd_duration
+      // "took 36m") isn't squished against the ports. Empty stays empty.
+      process.stdout.write(line ? line + " " : "");
       break;
     }
     case "ports": {
