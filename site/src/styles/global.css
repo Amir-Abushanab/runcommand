@@ -122,3 +122,21 @@ section { padding-block: clamp(3rem, 8vw, 5.5rem); }
   color: #8b949e;
 }
 .term-body .cc-caret { color: #56d4dd; }
+.term-body .cc-typed { color: #c9d1d9; }
+/* Blinking input cursor for the interactive hero widget. */
+.term-body .cc-cursor { color: #6e7681; animation: cc-blink 1.06s infinite; }
+.term-body .cc-cursor[hidden] { display: none; }
+@keyframes cc-blink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
+/* Port in the widget: looks like the clickable link, without being a dead localhost anchor. */
+.term-body .cc-port { color: #56d4dd; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
+.term-body .cc-reveal { animation: cc-fade 0.28s ease both; }
+@keyframes cc-fade { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
+/* The hero widget replays on click. */
+#cc-widget { cursor: pointer; }
+@media (prefers-reduced-motion: reduce) { .term-body .cc-cursor { animation: none; } }
+
+/* Inline tool links with a favicon. The label carries the underline so the icon
+   stays clean; a favicon that fails to load removes itself (see onerror). */
+.tool-link { text-decoration: none; white-space: nowrap; }
+.tool-link > span { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.tool-fav { display: inline-block; inline-size: 1.05em; block-size: 1.05em; border-radius: 3px; vertical-align: -0.16em; margin-inline-end: 0.34em; object-fit: contain; }

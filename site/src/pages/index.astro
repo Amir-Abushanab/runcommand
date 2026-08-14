@@ -5,17 +5,23 @@ import Terminal from "../components/Terminal.astro";
 const repo = "https://github.com/amir-abushanab/runcommand";
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+// Inline a vendored favicon; onerror removes it, so a bad load leaves no broken
+// icon (the fallback is no icon, never a misrendered one).
+const favImg = (file) => `<img class="tool-fav" src="${base}/favicons/${file}" alt="" width="14" height="14" loading="lazy" onerror="this.remove()">`;
+// A tool name linked to its site with its favicon. Omit `file` for no icon.
+const toolLink = (href, label, file) => `<a class="tool-link" href="${href}" target="_blank" rel="noopener">${file ? favImg(file) : ""}<span>${label}</span></a>`;
+
 const features = [
-  { icon: "◆", title: "LLM-detected", body: "A quick claude -p call reads your package.json scripts, lockfile and manifests to work out the real dev command: pnpm dev, yarn dev, cargo run, docker compose up." },
+  { icon: "◆", title: "LLM-detected", body: "A quick headless call to your AI CLI — Claude by default; Gemini, Cursor, OpenCode, and more — reads your package.json scripts, lockfile and manifests to work out the real dev command: pnpm dev, cargo run, mix phx.server, docker compose up." },
   { icon: "⚡", title: "Cached, never blocking", body: "Detected once, then cached per project. The status line is a ~50ms cache read; detection runs in the background." },
   { icon: "↻", title: "Self-healing", body: "The cache is keyed to a fingerprint of your manifests. Edit a Makefile target or a package.json script and it re-detects on the next render. Nothing to remember." },
   { icon: "◉", title: "Live ports", body: "Shows the localhost servers actually running for this project, scoped by process working dir, as clickable links. Databases and other projects don't leak in." },
-  { icon: "▤", title: "Runs everywhere", body: "One CLI across Claude Code, starship, OpenCode, and Qwen Code, plus Codex once it ships a status-line hook." },
+  { icon: "▤", title: "Runs everywhere", body: `One CLI across ${toolLink("https://claude.com/claude-code", "Claude Code", "claude.svg")}, ${toolLink("https://starship.rs", "starship", "starship.png")}, ${toolLink("https://opencode.ai", "OpenCode", "opencode.svg")}, and ${toolLink("https://github.com/QwenLM/qwen-code", "Qwen Code", "qwen.png")}, plus ${toolLink("https://github.com/openai/codex", "Codex")} once it ships a status-line hook. No hook? It rides your tmux status bar or shell prompt — around any TUI, aider and goose included.` },
   { icon: "✦", title: "Colorblind-safe", body: "Each service in a monorepo gets its own colour from a colorblind-safe palette. Labels tell them apart even when the colours can't." },
 ];
 
 const steps = [
-  { n: "1", title: "Detect", body: "claude -p reads the project's signals and returns the dev/run command (or several, for a monorepo)." },
+  { n: "1", title: "Detect", body: "Your AI CLI (Claude by default; Gemini, Cursor, OpenCode, …) reads the project's signals and returns the dev/run command (or several, for a monorepo)." },
   { n: "2", title: "Cache", body: "Saved per project under ~/.cache/runcommand, keyed to a hash of the manifests that define it." },
   { n: "3", title: "Serve", body: "Status lines and prompts read the cache instantly; live ports come from a short-cached lsof scan." },
   { n: "4", title: "Self-heal", body: "Change a manifest, the fingerprint changes, and a background re-detect refreshes the answer." },
@@ -38,18 +44,32 @@ const commands = [
 
 // color = brand colour shown on hover; near-black brands fall back to the theme
 // text colour so they stay visible. osc8: false marks terminals without OSC 8.
+// url = official homepage, opened in a new tab.
 const terminals = [
-  { slug: "ghostty", name: "Ghostty", color: "#3551F3" },
-  { slug: "iterm2", name: "iTerm2", color: "var(--text)" },
-  { slug: "wezterm", name: "WezTerm", color: "#4E49EE" },
-  { slug: "kitty", name: "kitty", color: "#C0C81F" },
-  { slug: "alacritty", name: "Alacritty", color: "#F46D01" },
-  { slug: "warp", name: "Warp", color: "#01A4FF" },
-  { slug: "windowsterminal", name: "Windows Terminal", color: "#4CC2FF" },
-  { slug: "visualstudiocode", name: "VS Code", color: "#0098FF" },
-  { slug: "gnometerminal", name: "GNOME Terminal", color: "var(--text)" },
-  { slug: "apple", name: "Apple Terminal", color: "var(--text)", osc8: false },
+  { slug: "ghostty", name: "Ghostty", color: "#3551F3", url: "https://ghostty.org" },
+  { slug: "iterm2", name: "iTerm2", color: "var(--text)", url: "https://iterm2.com" },
+  { slug: "wezterm", name: "WezTerm", color: "#4E49EE", url: "https://wezterm.org" },
+  { slug: "kitty", name: "kitty", color: "#C0C81F", url: "https://sw.kovidgoyal.net/kitty/" },
+  { slug: "alacritty", name: "Alacritty", color: "#F46D01", url: "https://alacritty.org" },
+  { slug: "warp", name: "Warp", color: "#01A4FF", url: "https://www.warp.dev" },
+  { slug: "windowsterminal", name: "Windows Terminal", color: "#4CC2FF", url: "https://github.com/microsoft/terminal" },
+  { slug: "visualstudiocode", name: "VS Code", color: "#0098FF", url: "https://code.visualstudio.com" },
+  { slug: "gnometerminal", name: "GNOME Terminal", color: "var(--text)", url: "https://help.gnome.org/users/gnome-terminal/stable/" },
+  { slug: "apple", name: "Apple Terminal", color: "var(--text)", osc8: false, url: "https://support.apple.com/guide/terminal/welcome/mac" },
 ];
+
+// Inline links for tools named in prose (opened in a new tab).
+const tools = {
+  claude: "https://claude.com/claude-code",
+  starship: "https://starship.rs",
+  qwen: "https://github.com/QwenLM/qwen-code",
+  opencode: "https://opencode.ai",
+  codex: "https://github.com/openai/codex",
+};
+
+// Prose with inline tool links + favicons, injected via set:html.
+const installNote = `Detects the tools you have — ${toolLink(tools.claude, "Claude Code", "claude.svg")}, ${toolLink(tools.qwen, "Qwen", "qwen.png")}, ${toolLink(tools.starship, "starship", "starship.png")} — and wires each up, backing up every file it touches. Zero dependencies: just Node and your agent's CLI (<code>claude</code> by default). <a href="${repo}" rel="noopener">Full setup &rarr;</a>`;
+const surfacesLead = `One CLI speaking ${toolLink(tools.claude, "Claude Code", "claude.svg")}'s <code>statusLine</code> contract (JSON in, a line out). Everything that copied that contract gets it for free, plus a native ${toolLink(tools.opencode, "OpenCode", "opencode.svg")} plugin.`;
 
 const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 014 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48l-.01 2.2c0 .21.15.46.55.38A8 8 0 008 .2z";
 ---
@@ -96,14 +116,15 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
             <code id="install-cmd">runcommand init</code>
             <button class="copy" type="button" data-copy-target="install-cmd" aria-label="Copy command">Copy</button>
           </div>
-          <p class="install-note">Detects the tools you have — Claude Code, Qwen, starship — and wires each up, backing up every file it touches. Zero dependencies: just Node and your agent's CLI (<code>claude</code> by default). <a href={repo} rel="noopener">Full setup &rarr;</a></p>
+          <p class="install-note" set:html={installNote}></p>
         </div>
 
-        <div class="hero-demo">
-          <Terminal title="Claude Code" caption="Line one is your usual status line; the ▶ line is what runcommand adds.">
-<span class="cc-box"><span class="cc-caret">&gt;</span> <span class="dim">Try &quot;add a dark-mode toggle&quot;</span></span>
+        <div class="hero-demo" id="cc-widget" role="img" title="Click to replay"
+             aria-label="In Claude Code, the /runcommand slash command detects the run command and shows it in the status line: pnpm dev, serving localhost:5173.">
+          <Terminal title="Claude Code" caption="Type /runcommand — it detects the command and its live port. (click to replay)">
+<span class="cc-box"><span class="cc-caret">&gt;</span> <span id="cc-typed" class="cc-typed">/runcommand</span><span id="cc-cursor" class="cc-cursor" hidden>▍</span></span>
 <span class="ln"><span class="dim">[Opus] · principlestash.com · 42% context</span></span>
-<span class="ln"><span class="dim">▶</span> <span class="cyan">pnpm dev</span>  <span class="dim">◉</span> <a href="http://localhost:3000">:3000</a> <a href="http://localhost:5173">:5173</a></span>
+<span class="ln" id="cc-run"><span class="dim">▶</span> <span class="cyan">pnpm dev</span>  <span class="dim">◉</span> <span class="cc-port">:5173</span></span>
           </Terminal>
         </div>
       </div>
@@ -119,7 +140,7 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
             <li class="card">
               <span class="card-icon" aria-hidden="true">{f.icon}</span>
               <h3>{f.title}</h3>
-              <p>{f.body}</p>
+              <p set:html={f.body}></p>
             </li>
           ))}
         </ul>
@@ -151,8 +172,8 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
           </Terminal>
           <Terminal title="pin it exactly · .claude-run">
 <span class="ln"><span class="comment"># one command per line, optional label:</span></span>
-<span class="ln"><span class="white">web:</span> pnpm dev:web</span>
-<span class="ln"><span class="white">api:</span> pnpm dev:api</span>
+<span class="ln"><span class="white">api:</span> go run ./cmd/server</span>
+<span class="ln"><span class="white">web:</span> pnpm dev</span>
           </Terminal>
         </div>
       </div>
@@ -163,7 +184,7 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
       <div class="wrap">
         <p class="eyebrow">Surfaces</p>
         <h2>The same answer, wherever you look.</h2>
-        <p class="lead">One CLI speaking Claude Code's <code>statusLine</code> contract (JSON in, a line out). Everything that copied that contract gets it for free, plus a native OpenCode plugin.</p>
+        <p class="lead" set:html={surfacesLead}></p>
 
         <div class="surface-grid">
           <Terminal title="starship · shell prompt" caption="A right-aligned tagline; ports clickable via OSC 8.">
@@ -173,11 +194,11 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
 
           <Terminal title="OpenCode · TUI footer" caption="A native Solid plugin rendering into app_bottom.">
 <span class="ln"><span class="dim">◍ claude-sonnet · 18% · 2m04s</span></span>
-<span class="ln"><span class="dim">▶</span> <span class="cyan">pnpm dev</span>  <span class="dim">◉</span> <a href="http://localhost:3000">:3000</a></span>
+<span class="ln"><span class="dim">▶</span> <span class="cyan">bun dev</span>  <span class="dim">◉</span> <a href="http://localhost:3000">:3000</a></span>
           </Terminal>
 
-          <Terminal title="monorepo · distinct services" caption="Each service its own colour and label.">
-<span class="ln"><span class="dim">▶</span> <span class="dim">web:</span> <span class="cyan">pnpm dev:web</span> <span class="dim">·</span> <span class="dim">api:</span> <span class="magenta">pnpm dev:api</span> <span class="dim">·</span> <span class="dim">worker:</span> <span class="green">pnpm dev:worker</span></span>
+          <Terminal title="monorepo · distinct services" caption="Any stack, each its own colour and label.">
+<span class="ln"><span class="dim">▶</span> <span class="dim">web:</span> <span class="cyan">pnpm dev</span> <span class="dim">·</span> <span class="dim">api:</span> <span class="magenta">mix phx.server</span> <span class="dim">·</span> <span class="dim">jobs:</span> <span class="green">cargo run</span></span>
           </Terminal>
 
           <Terminal title="first visit · non-blocking" caption="A placeholder while the background detect runs.">
@@ -191,8 +212,10 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
         <ul class="logos" role="list">
           {terminals.map((t) => (
             <li class="logo-item">
-              <span class="ico" style={`--logo:url("${base}/logos/${t.slug}.svg");--brand:${t.color}`}></span>
-              <span>{t.name}{t.osc8 === false ? "*" : ""}</span>
+              <a href={t.url} target="_blank" rel="noopener" aria-label={t.name}>
+                <span class="ico" style={`--logo:url("${base}/logos/${t.slug}.svg");--brand:${t.color}`}></span>
+                <span>{t.name}{t.osc8 === false ? "*" : ""}</span>
+              </a>
             </li>
           ))}
         </ul>
@@ -257,6 +280,49 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
         } catch {}
       });
     });
+  </script>
+
+  <script is:inline>
+    // Hero widget: type /runcommand, "detect", reveal the command + port. Plays
+    // once when scrolled into view; click to replay. The end state lives in the
+    // markup, so no-JS and reduced-motion users just see the result.
+    (function () {
+      const w = document.getElementById("cc-widget");
+      const typed = document.getElementById("cc-typed");
+      const cursor = document.getElementById("cc-cursor");
+      const run = document.getElementById("cc-run");
+      if (!w || !typed || !run) return;
+      const CMD = "/runcommand";
+      const RESULT = run.innerHTML; // captured final state from the markup
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      let playing = false;
+      async function play() {
+        if (playing) return;
+        playing = true;
+        typed.textContent = "";
+        if (cursor) cursor.hidden = false;
+        run.innerHTML = "";
+        for (const ch of CMD) { typed.textContent += ch; await sleep(60); }
+        await sleep(380);
+        if (cursor) cursor.hidden = true;
+        run.innerHTML = '<span class="dim">▶ finding run command<span class="cc-dots"></span></span>';
+        const dots = run.querySelector(".cc-dots");
+        let n = 0;
+        const t = setInterval(() => { n = (n + 1) % 4; dots.textContent = ".".repeat(n); }, 250);
+        await sleep(1450);
+        clearInterval(t);
+        run.innerHTML = RESULT;
+        run.classList.add("cc-reveal");
+        setTimeout(() => run.classList.remove("cc-reveal"), 400);
+        playing = false;
+      }
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const io = new IntersectionObserver((es) => {
+        if (es[0].isIntersecting) { io.disconnect(); play(); }
+      }, { threshold: 0.5 });
+      io.observe(w);
+      w.addEventListener("click", () => play());
+    })();
   </script>
 
   <style>
@@ -333,7 +399,10 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
 
     /* compatibility (merged into surfaces) */
     .logos { list-style: none; padding: 0; margin-block: 1.6rem; display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); }
-    .logo-item { display: flex; flex-direction: column; align-items: center; gap: 0.65rem; padding: 1.3rem 0.5rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+    .logo-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); transition: border-color 0.14s ease; }
+    .logo-item a { display: flex; flex-direction: column; align-items: center; gap: 0.65rem; padding: 1.3rem 0.5rem; text-decoration: none; color: inherit; border-radius: inherit; }
+    .logo-item:hover { border-color: color-mix(in oklab, var(--accent) 40%, var(--border)); }
+    .logo-item a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .logo-item .ico {
       inline-size: 30px; block-size: 30px; display: block;
       background-color: var(--muted);
