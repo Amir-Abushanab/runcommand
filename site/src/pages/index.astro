@@ -22,15 +22,18 @@ const steps = [
 ];
 
 const commands = [
+  ["init", "Detect your tools and wire runcommand into each  ·  --dry-run --yes --surfaces"],
   ["statusline", "Render the run command + live ports (Claude Code / Qwen Code call this)"],
   ["prompt", "Plain run command for a shell prompt (non-blocking)"],
   ["promptline", "Run command + clickable ports, styled (starship module)"],
   ["ports", "This project's live localhost ports  ·  --links --urls --json --all"],
   ["json", "Structured { commands, ports } for plugins (the OpenCode plugin uses this)"],
-  ["detect", "Detect now (calls claude -p), print + cache"],
+  ["detect", "Detect now (asks the detection agent), print + cache"],
   ["get", "Print the cached command (detect if missing)"],
   ["refresh", "Re-detect  ·  --hint \"what's wrong\" to steer, --clear-hint to reset"],
   ["path", "Print the cache file path for a project"],
+  ["agents", "Show the detection chain — which agents are installed  ·  --probe to test each"],
+  ["uninstall", "Remove runcommand's wiring (restores what was there)"],
 ];
 
 // color = brand colour shown on hover; near-black brands fall back to the theme
@@ -90,15 +93,16 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
             </a>
           </div>
           <div class="install">
-            <code id="install-cmd">runcommand statusline</code>
+            <code id="install-cmd">runcommand init</code>
             <button class="copy" type="button" data-copy-target="install-cmd" aria-label="Copy command">Copy</button>
           </div>
-          <p class="install-note">Point Claude Code's <code>statusLine.command</code> at it. Zero dependencies: just Node and the <code>claude</code> CLI.</p>
+          <p class="install-note">Detects the tools you have — Claude Code, Qwen, starship — and wires each up, backing up every file it touches. Zero dependencies: just Node and your agent's CLI (<code>claude</code> by default). <a href={repo} rel="noopener">Full setup &rarr;</a></p>
         </div>
 
         <div class="hero-demo">
-          <Terminal title="Claude Code · status bar" caption="The line it adds, beneath your existing status line.">
-<span class="ln"><span class="dim">◆ opus · anesthify · 42%</span></span>
+          <Terminal title="Claude Code" caption="Line one is your usual status line; the ▶ line is what runcommand adds.">
+<span class="cc-box"><span class="cc-caret">&gt;</span> <span class="dim">Try &quot;add a dark-mode toggle&quot;</span></span>
+<span class="ln"><span class="dim">[Opus] · principlestash.com · 42% context</span></span>
 <span class="ln"><span class="dim">▶</span> <span class="cyan">pnpm dev</span>  <span class="dim">◉</span> <a href="http://localhost:3000">:3000</a> <a href="http://localhost:5173">:5173</a></span>
           </Terminal>
         </div>
@@ -163,7 +167,7 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
 
         <div class="surface-grid">
           <Terminal title="starship · shell prompt" caption="A right-aligned tagline; ports clickable via OSC 8.">
-<span class="ln"><span class="row"><span><span class="magenta">~/Code/anesthify</span> <span class="dim">on</span> <span class="blue"> main</span></span><span><span class="dim">▶</span> <span class="cyan">pnpm dev</span> <span class="dim">·</span> <a href="http://localhost:5173">:5173</a></span></span></span>
+<span class="ln"><span class="row"><span><span class="magenta">~/Code/principlestash.com</span> <span class="dim">on</span> <span class="blue"> main</span></span><span><span class="dim">▶</span> <span class="cyan">pnpm dev</span> <span class="dim">·</span> <a href="http://localhost:5173">:5173</a></span></span></span>
 <span class="ln"><span class="green">❯</span> <span class="dim">▍</span></span>
           </Terminal>
 
@@ -275,7 +279,7 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
     /* hero */
     .hero { padding-block: clamp(2.5rem, 8vw, 5rem); }
     .hero-in { display: grid; gap: clamp(2rem, 5vw, 3.5rem); align-items: center; }
-    @media (min-width: 900px) { .hero-in { grid-template-columns: 1.05fr 0.95fr; } }
+    @media (min-width: 900px) { .hero-in { grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); } }
     h1 { font-size: clamp(2.1rem, 6vw, 3.6rem); margin-block-end: 1rem; }
     .cta { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-block: 1.5rem; }
     .btn .gh-icon { margin-inline-end: 0.15rem; }

@@ -112,3 +112,13 @@ section { padding-block: clamp(3rem, 8vw, 5.5rem); }
    whitespace (Astro collapses newlines in slotted content). */
 .term-body .ln { display: block; }
 .term-body .ln:empty { block-size: 1.75em; }
+/* Claude Code's input box: a rounded, full-width row above the status line. */
+.term-body .cc-box {
+  display: block;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 0.28rem 0.7rem;
+  margin-block-end: 0.55rem;
+  color: #8b949e;
+}
+.term-body .cc-caret { color: #56d4dd; }
