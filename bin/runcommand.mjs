@@ -22,7 +22,7 @@
  *   help            usage
  *
  * Flags: -C/--project <dir>, --model <id>, --quiet
- * Env:   RUNCOMMAND_AGENT (claude|opencode|gemini|qwen|codex), RUNCOMMAND_DETECT_CMD,
+ * Env:   RUNCOMMAND_AGENT (detection agent priority list; see `runcommand agents`), RUNCOMMAND_DETECT_CMD,
  *        RUNCOMMAND_AGENT_BIN, RUNCOMMAND_MODEL, RUNCOMMAND_BASE, RUNCOMMAND_ICON,
  *        RUNCOMMAND_LABEL, RUNCOMMAND_TTL_MS, NO_COLOR
  */
@@ -377,11 +377,27 @@ function formatCommandsCLI(commands) {
 // empty means "let the agent use its own configured default" (only claude, which
 // defaults to a big model interactively, needs us to pick the cheap one).
 const AGENTS = {
-  claude:   { bin: "claude",   pre: (m) => ["-p", ...(m ? ["--model", m] : [])], model: "haiku" },
-  opencode: { bin: "opencode", pre: (m) => ["run", ...(m ? ["--model", m] : [])], model: "" },
-  gemini:   { bin: "gemini",   pre: (m) => [...(m ? ["-m", m] : []), "-p"],       model: "" },
-  qwen:     { bin: "qwen",     pre: (m) => [...(m ? ["-m", m] : []), "-p"],       model: "" },
-  codex:    { bin: "codex",    pre: (m) => ["exec", ...(m ? ["-m", m] : [])],     model: "" },
+  claude:   { bin: "claude",       pre: (m) => ["-p", ...(m ? ["--model", m] : [])], model: "haiku" },
+  opencode: { bin: "opencode",     pre: (m) => ["run", ...(m ? ["--model", m] : [])], model: "" },
+  gemini:   { bin: "gemini",       pre: (m) => [...(m ? ["-m", m] : []), "-p"],       model: "" },
+  qwen:     { bin: "qwen",         pre: (m) => [...(m ? ["-m", m] : []), "-p"],       model: "" },
+  codex:    { bin: "codex",        pre: (m) => ["exec", ...(m ? ["-m", m] : [])],     model: "" },
+  cursor:   { bin: "cursor-agent", pre: (m) => ["-p", "--output-format", "text", ...(m ? ["--model", m] : [])], model: "" },
+  crush:    { bin: "crush",        pre: (m) => ["run", "-q", ...(m ? ["-m", m] : [])], model: "" },
+  amp:      { bin: "amp",          pre: () => ["-x"],                                 model: "" },
+  llm:      { bin: "llm",          pre: (m) => (m ? ["-m", m] : []),                  model: "" },
+  sgpt:     { bin: "sgpt",         pre: (m) => (m ? ["--model", m] : []),             model: "" },
+  // Agentic tools — they edit files / run tools rather than just answer, so they sit
+  // LAST in the default chain: reached only when nothing cleaner is installed (i.e. it
+  // genuinely IS your agent). Flags minimize side effects; detection only asks a
+  // question, so a well-behaved model answers in <cmd> tags without editing anything.
+  aider:    { bin: "aider",        pre: (m) => ["--yes", "--no-auto-commits", ...(m ? ["--model", m] : []), "--message"], model: "" },
+  goose:    { bin: "goose",        pre: () => ["run", "--no-session", "-t"],          model: "" },
+  copilot:  { bin: "copilot",      pre: (m) => ["-p", ...(m ? ["--model", m] : [])],  model: "" },
+  // Local models. Kept out of the default chain (below) so it's never auto-run —
+  // `ollama run` would pull a multi-GB model on first use. Opt in with
+  // RUNCOMMAND_AGENT=ollama (and RUNCOMMAND_MODEL to pick the model).
+  ollama:   { bin: "ollama",       pre: (m) => ["run", m || "llama3.2"],             model: "" },
 };
 
 // Where agents commonly install, so we don't depend on the status line's PATH
@@ -410,7 +426,7 @@ function findBin(name, override) {
 // on the machine. Order comes from RUNCOMMAND_AGENT (a comma/space list) or this
 // default; unknown names are ignored, uninstalled ones skipped. A full
 // RUNCOMMAND_DETECT_CMD is an explicit single backend and bypasses the chain.
-const DEFAULT_AGENT_ORDER = ["claude", "opencode", "gemini", "qwen", "codex"];
+const DEFAULT_AGENT_ORDER = ["claude", "opencode", "gemini", "qwen", "codex", "cursor", "crush", "amp", "llm", "sgpt", "aider", "goose", "copilot"];
 
 let AGENT_CHAIN = null;
 function agentChain() {
@@ -715,8 +731,8 @@ Flags: -C/--project <dir>   --model <id>   --quiet
        --clear-hint             forget a previously saved hint
        --links  ":PORT" OSC 8 links   --urls  full "http://localhost:PORT" (auto-linkified)
        --json  ports as JSON   --all  all localhost ports
-Env:   RUNCOMMAND_AGENT   priority list tried in order, first installed wins,
-                          e.g. "opencode,claude"; default tries claude→opencode→gemini→qwen→codex
+Env:   RUNCOMMAND_AGENT   priority list tried in order, first installed wins, e.g.
+                          "opencode,claude"; unset = try each installed (see 'runcommand agents')
        RUNCOMMAND_DETECT_CMD ("opencode run", "{}" = prompt slot)   RUNCOMMAND_AGENT_BIN
        RUNCOMMAND_MODEL (default: haiku for claude, else the agent's own default)
        RUNCOMMAND_BASE (chain another status line)   RUNCOMMAND_ICON   RUNCOMMAND_LABEL
@@ -980,12 +996,13 @@ function runAgents() {
   say("  Will try, in order:");
   if (!chain.length) say("    (none found)");
   chain.forEach((e, i) => say(`    ${i + 1}. ${e.name.padEnd(9)} ${e.bin}   (model: ${e.model || "agent default"})`));
-  const idle = DEFAULT_AGENT_ORDER.filter((n) => !inChain.has(n) && binOf(n));
-  const missing = DEFAULT_AGENT_ORDER.filter((n) => !inChain.has(n) && !binOf(n));
-  if (idle.length) say(`\n  Installed but excluded by RUNCOMMAND_AGENT: ${idle.join(", ")}`);
+  const known = Object.keys(AGENTS);
+  const idle = known.filter((n) => !inChain.has(n) && binOf(n));
+  const missing = known.filter((n) => !inChain.has(n) && !binOf(n));
+  if (idle.length) say(`\n  Installed but not in the active chain (opt in via RUNCOMMAND_AGENT): ${idle.join(", ")}`);
   if (missing.length) say(`\n  Not installed: ${missing.join(", ")}`);
   const raw = (process.env.RUNCOMMAND_AGENT || "").trim();
-  say(`\n  Order source: ${raw ? `RUNCOMMAND_AGENT=${raw}` : "default (claude→opencode→gemini→qwen→codex)"}`);
+  say(`\n  Order source: ${raw ? `RUNCOMMAND_AGENT=${raw}` : `default (${DEFAULT_AGENT_ORDER.join("→")})`}`);
   if (process.env.RUNCOMMAND_MODEL) say(`  RUNCOMMAND_MODEL=${process.env.RUNCOMMAND_MODEL} (applied to whichever agent runs)`);
   if (ARGS.probe) {
     say("\n  Probing (one tiny call per installed agent)…");

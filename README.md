@@ -33,7 +33,7 @@ your status line (see [Coexisting](#coexisting-with-another-status-line)).
 > 🌐 **Showcase:** the [`site/`](site/) directory is an Astro page (run it locally
 > with `pnpm site`) that deploys to `https://amir-abushanab.github.io/runcommand/`.
 
-**Jump to:** [Install](#install) · [Claude Code](#wire-it-into-claude-code) · [Detection agent](#detection-agent) · [Live ports](#live-localhost-ports) · [Shell prompt](#shell-prompt-starship) · [Other surfaces](#other-agents-and-prompts) · [Commands](#commands) · [Config](#config-env-vars) · [How it works](#how-detection-works)
+**Jump to:** [Install](#install) · [Claude Code](#wire-it-into-claude-code) · [Detection agent](#detection-agent) · [Live ports](#live-localhost-ports) · [Shell prompt](#shell-prompt-starship) · [Other surfaces](#other-agents-and-prompts) · [tmux & ambient](#terminal-multiplexers--ambient-surfaces) · [Commands](#commands) · [Config](#config-env-vars) · [How it works](#how-detection-works)
 
 ## Requirements
 
@@ -91,7 +91,7 @@ through to whatever else is on the machine, and you never *need* any specific ag
 (This is about *which AI figures out the command*, separate from [which tools display
 it](#other-agents-and-prompts).)
 
-The default order is `claude → opencode → gemini → qwen → codex`. Pin or reorder with
+The default order is `claude → opencode → gemini → qwen → codex → cursor → crush → amp → llm → sgpt`, then the agentic last-resorts `aider → goose → copilot`. Pin or reorder with
 `RUNCOMMAND_AGENT` — a single value forces one agent, a comma-separated list sets the
 priority chain (e.g. `RUNCOMMAND_AGENT=opencode,claude`). A broken agent (exits non-zero)
 also falls through to the next; a clean "no run command" answer does not:
@@ -103,6 +103,18 @@ also falls through to the next; a clean "no run command" answer does not:
 | `gemini` | `gemini -p "<prompt>"` | [Gemini CLI](https://github.com/google-gemini/gemini-cli) |
 | `qwen` | `qwen -p "<prompt>"` | [Qwen Code](https://github.com/QwenLM/qwen-code) |
 | `codex` | `codex exec "<prompt>"` | [Codex CLI](https://github.com/openai/codex) |
+| `cursor` | `cursor-agent -p --output-format text "<prompt>"` | [Cursor CLI](https://cursor.com/docs/cli/headless) |
+| `crush` | `crush run -q "<prompt>"` | [Charm Crush](https://github.com/charmbracelet/crush) |
+| `amp` | `amp -x "<prompt>"` | [Amp](https://ampcode.com) |
+| `llm` | `llm "<prompt>"` | [llm](https://llm.datasette.io) |
+| `sgpt` | `sgpt "<prompt>"` | [Shell GPT](https://github.com/TheR1D/shell_gpt) |
+| `aider`† | `aider --yes --no-auto-commits --message "<prompt>"` | [Aider](https://aider.chat) |
+| `goose`† | `goose run --no-session -t "<prompt>"` | [goose](https://block.github.io/goose/) |
+| `copilot`† | `copilot -p "<prompt>"` | [Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli) |
+| `ollama`\* | `ollama run <model> "<prompt>"` | [Ollama](https://ollama.com) — local |
+
+<sub>† Agentic — `aider` edits files, `goose` runs tools, `copilot` is auth/confirmation-gated — so they sit **last** in the default chain (reached only when nothing cleaner is installed, i.e. it genuinely is your agent) with side-effect-minimizing flags. Prefer pinning a cleaner agent.</sub><br/>
+<sub>\* Ollama is **never** in the default chain (`ollama run` pulls a multi-GB model on first use). Opt in explicitly: `RUNCOMMAND_AGENT=ollama RUNCOMMAND_MODEL=llama3.2`. All of these are **detection-only** — of the terminal AI tools, only Claude Code and Qwen Code expose a config-based status line. For everything else, show the line via an **ambient surface** instead (see [Terminal multiplexers & ambient surfaces](#terminal-multiplexers--ambient-surfaces)).</sub>
 
 ```json
 {
@@ -304,6 +316,41 @@ refresh_interval_ms = 30000
 timeout_ms = 1000
 ```
 
+## Terminal multiplexers & ambient surfaces
+
+Some tools — **aider**, **goose**, **Cursor**, **Codex**, GitHub **Copilot** — are
+full-screen TUIs with no status-line hook, so runcommand can't render *inside* them. It
+doesn't need to: an **ambient surface** shows the line *around* whatever's running, so it
+works for any tool in your terminal.
+
+**tmux** — put the run command in the status bar; it stays visible the whole time you're
+inside aider/goose/etc., and tracks the active pane's project. Compose it with your
+existing `status-right` rather than clobbering it:
+
+```tmux
+# ~/.tmux.conf
+set -g status-right "#(runcommand prompt -C '#{pane_current_path}')  %H:%M"
+set -g status-interval 5
+```
+
+`runcommand prompt` prints the plain command (and nothing in non-project dirs, so the
+segment just disappears). Append live ports with `#(runcommand ports -C '#{pane_current_path}')`.
+
+**Zellij** — its built-in status bar can't run commands, so use the
+[`zjstatus`](https://github.com/dj95/zjstatus) plugin's `command_*` fields pointed at
+`runcommand prompt`.
+
+**Terminal title** — a universal fallback (shows in the tab/title bar even with no
+multiplexer, though some TUIs overwrite it). From a shell hook:
+
+```sh
+# zsh precmd() or bash PROMPT_COMMAND
+printf '\033]0;%s\007' "$(runcommand prompt)"
+```
+
+And the **shell prompt** ([starship](#shell-prompt-starship), Oh My Posh) is itself an
+ambient surface — it shows the line before you launch the tool.
+
 ## Commands
 
 ```sh
@@ -341,7 +388,7 @@ future manifest change won't regress to the wrong answer. Wipe it with
 
 | Var | Default | Purpose |
 | --- | --- | --- |
-| `RUNCOMMAND_AGENT` | *(auto)* | Detection agent priority list, tried in order, first installed wins — e.g. `opencode,claude`. Default: `claude,opencode,gemini,qwen,codex` (see [Detection agent](#detection-agent)) |
+| `RUNCOMMAND_AGENT` | *(auto)* | Detection agent priority list, tried in order, first installed wins — e.g. `opencode,claude`. Default: `claude,opencode,gemini,qwen,codex,cursor,crush,amp,llm,sgpt,aider,goose,copilot` (plus `ollama`, opt-in; see [Detection agent](#detection-agent)) |
 | `RUNCOMMAND_DETECT_CMD` | – | Full custom detect command; the prompt is appended, or put where `{}` appears |
 | `RUNCOMMAND_AGENT_BIN` | – | Path to the agent binary (else auto-resolved) |
 | `RUNCOMMAND_MODEL` | `haiku`\* | Detection model (\*`haiku` for `claude`; the agent's own default otherwise) |
