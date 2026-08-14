@@ -19,7 +19,8 @@ it. **runcommand** works it out and keeps it in front of you:
   <img src="assets/shot-statusbar.png" width="720" alt="runcommand in the Claude Code status bar: ▶ pnpm dev with clickable ports :3000 :5173, beneath the existing status line" />
 </p>
 
-A quick `claude -p` call works out the command from your `package.json` scripts,
+A quick headless LLM call (Claude Code's `claude -p` by default — or [any agent you
+configure](#detection-agent)) works out the command from your `package.json` scripts,
 lockfile and manifests, **caches it per project**, and only re-asks when a manifest
 changes — so the render never waits on the model (cache hit ~50ms; a miss shows
 `▶ finding run command…` and detects in the background).
@@ -32,12 +33,12 @@ your status line (see [Coexisting](#coexisting-with-another-status-line)).
 > 🌐 **Showcase:** the [`site/`](site/) directory is an Astro page (run it locally
 > with `pnpm site`) that deploys to `https://amir-abushanab.github.io/runcommand/`.
 
-**Jump to:** [Install](#install) · [Claude Code](#wire-it-into-claude-code) · [Live ports](#live-localhost-ports) · [Shell prompt](#shell-prompt-starship) · [Other surfaces](#other-agents-and-prompts) · [Commands](#commands) · [Config](#config-env-vars) · [How it works](#how-detection-works)
+**Jump to:** [Install](#install) · [Claude Code](#wire-it-into-claude-code) · [Detection agent](#detection-agent) · [Live ports](#live-localhost-ports) · [Shell prompt](#shell-prompt-starship) · [Other surfaces](#other-agents-and-prompts) · [Commands](#commands) · [Config](#config-env-vars) · [How it works](#how-detection-works)
 
 ## Requirements
 
 - **Node** ≥ 18 (already present if you run Claude Code)
-- The **`claude`** CLI on your `PATH` (used for detection)
+- An **AI CLI for detection** on your `PATH` — [`claude`](https://claude.com/claude-code) (Claude Code) by default; OpenCode, Gemini CLI, Qwen Code, or Codex work too (see [Detection agent](#detection-agent))
 
 ## Install
 
@@ -50,6 +51,12 @@ ln -sfn "$PWD/bin/runcommand.mjs" ~/.local/bin/runcommand   # from the repo root
 
 Or install it globally: `npm i -g .`. Prefer not to install at all? Every command
 below also works as `node bin/runcommand.mjs <command>`.
+
+**Fastest setup — `runcommand init`:** it detects the tools you actually have
+(Claude Code, Qwen Code, starship), wires each one for you, backs up every file it
+touches, and preserves any status line you already run. Preview with
+`runcommand init --dry-run`; undo everything with `runcommand uninstall`. The sections
+below are the manual equivalents.
 
 ## Wire it into Claude Code
 
@@ -74,6 +81,65 @@ If you didn't link it, use the full path instead:
 That's it. The first time you open each project the line reads
 `▶ finding run command…` for a few seconds, then flips to the real command and
 stays cached.
+
+## Detection agent
+
+Detection is just a headless LLM call: runcommand hands your project's signals to an
+AI CLI and reads the command back. It tries agents in priority order and uses the
+**first that's installed and answers** — so uninstalling Claude Code silently falls
+through to whatever else is on the machine, and you never *need* any specific agent.
+(This is about *which AI figures out the command*, separate from [which tools display
+it](#other-agents-and-prompts).)
+
+The default order is `claude → opencode → gemini → qwen → codex`. Pin or reorder with
+`RUNCOMMAND_AGENT` — a single value forces one agent, a comma-separated list sets the
+priority chain (e.g. `RUNCOMMAND_AGENT=opencode,claude`). A broken agent (exits non-zero)
+also falls through to the next; a clean "no run command" answer does not:
+
+| `RUNCOMMAND_AGENT` | Runs | Needs on `PATH` |
+| --- | --- | --- |
+| `claude` *(default)* | `claude -p "<prompt>" --model haiku` | [Claude Code](https://claude.com/claude-code) |
+| `opencode` | `opencode run "<prompt>"` | [OpenCode](https://opencode.ai) |
+| `gemini` | `gemini -p "<prompt>"` | [Gemini CLI](https://github.com/google-gemini/gemini-cli) |
+| `qwen` | `qwen -p "<prompt>"` | [Qwen Code](https://github.com/QwenLM/qwen-code) |
+| `codex` | `codex exec "<prompt>"` | [Codex CLI](https://github.com/openai/codex) |
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "RUNCOMMAND_AGENT=opencode runcommand statusline"
+  }
+}
+```
+
+`RUNCOMMAND_MODEL` overrides the model (passed as that agent's model flag); leave it
+unset for anything but `claude` to use the agent's own default. For claude it defaults
+to `haiku`.
+
+Run **`runcommand agents`** anytime to see the resolved chain — which agents are
+installed and which one wins. Add `--probe` to actually call each and confirm it
+responds (installed ≠ authenticated/working):
+
+```text
+Will try, in order:
+  1. claude    ~/.local/bin/claude       (model: haiku)
+  2. opencode  /opt/homebrew/bin/opencode (model: agent default)
+Not installed: gemini, qwen, codex
+```
+
+**Any other CLI?** Point `RUNCOMMAND_DETECT_CMD` at any command that takes a prompt and
+prints the model's answer to stdout. runcommand appends the prompt as the final argument
+(or substitutes it for a `{}` placeholder), so quoting is never your problem:
+
+```sh
+RUNCOMMAND_DETECT_CMD="my-llm --fast"          # runs: my-llm --fast "<prompt>"
+RUNCOMMAND_DETECT_CMD="my-llm --prompt {} -q"  # runs: my-llm --prompt "<prompt>" -q
+```
+
+The agent only has to emit the command in `<cmd></cmd>` tags (the prompt tells it how);
+caching, ports, and self-healing are unchanged. Use `RUNCOMMAND_AGENT_BIN` to point at a
+specific binary when it isn't on the status line's `PATH`.
 
 ## Coexisting with another status line
 
@@ -170,25 +236,26 @@ overridable with `RUNCOMMAND_PORT_STYLE`:
 ## Shell prompt (starship)
 
 <p align="center">
-  <img src="assets/shot-starship.png" width="720" alt="runcommand as a starship prompt tagline: ~/Code/anesthify on main  ▶ pnpm dev · :5173" />
+  <img src="assets/shot-starship.png" width="720" alt="runcommand as a starship prompt tagline: ~/Code/principlestash.com on main  ▶ pnpm dev · :5173" />
 </p>
 
 Show the run command + clickable ports in your shell prompt too. Add a custom
 module to `~/.config/starship.toml`:
 
 ```toml
-right_format = "${custom.runcommand}"
-
 [custom.runcommand]
 command = "runcommand promptline"   # or: node /path/to/bin/runcommand.mjs promptline
-when = true
 format = "$output"
 shell = ["bash", "--noprofile", "--norc"]
+ignore_timeout = true
 ```
 
 `promptline` is non-blocking and outputs an empty string when there's nothing to
-show, so the segment simply disappears in unrelated directories. (For oh-my-zsh or
-a bare prompt, call the same command from a `precmd` hook.)
+show, so the segment simply disappears in unrelated directories. Starship renders
+custom modules inline by default; for a right-aligned tagline add
+`right_format = "${custom.runcommand}"`. (`ignore_timeout` keeps a cold port scan
+from tripping starship's 500 ms command cap. For oh-my-zsh or a bare prompt, call
+the same command from a `precmd` hook.) This is exactly what `runcommand init` writes.
 
 ## Other agents and prompts
 
@@ -244,10 +311,13 @@ runcommand statusline        # render run command + live ports (Claude Code call
 runcommand prompt [dir]      # plain run command for a shell prompt (non-blocking)
 runcommand promptline [dir]  # run command + clickable ports, styled (for starship)
 runcommand ports [dir]       # this project's live localhost ports (--links --json --all)
-runcommand detect [dir]      # detect now (calls claude -p), print + cache
+runcommand detect [dir]      # detect now (asks the configured agent), print + cache
 runcommand get [dir]         # print the cached command (detect if missing)
 runcommand refresh [dir]     # re-detect and overwrite the cache
 runcommand path [dir]        # print the cache file path
+runcommand init              # wire runcommand into your installed tools (--yes --dry-run --surfaces)
+runcommand uninstall         # remove that wiring (restores what was there; --dry-run)
+runcommand agents            # show the detection chain — which agents are installed (--probe to test each)
 ```
 
 `dir` defaults to the current directory; the project root is resolved by walking
@@ -271,7 +341,10 @@ future manifest change won't regress to the wrong answer. Wipe it with
 
 | Var | Default | Purpose |
 | --- | --- | --- |
-| `RUNCOMMAND_MODEL` | `haiku` | Model used for detection (`claude -p --model`) |
+| `RUNCOMMAND_AGENT` | *(auto)* | Detection agent priority list, tried in order, first installed wins — e.g. `opencode,claude`. Default: `claude,opencode,gemini,qwen,codex` (see [Detection agent](#detection-agent)) |
+| `RUNCOMMAND_DETECT_CMD` | – | Full custom detect command; the prompt is appended, or put where `{}` appears |
+| `RUNCOMMAND_AGENT_BIN` | – | Path to the agent binary (else auto-resolved) |
+| `RUNCOMMAND_MODEL` | `haiku`\* | Detection model (\*`haiku` for `claude`; the agent's own default otherwise) |
 | `RUNCOMMAND_BASE` | – | Another status-line command to render above ours |
 | `RUNCOMMAND_ICON` | `▶` | Leading glyph (set empty to drop it) |
 | `RUNCOMMAND_LABEL` | – | Text before the command, e.g. `run: ` |
@@ -281,7 +354,7 @@ future manifest change won't regress to the wrong answer. Wipe it with
 | `RUNCOMMAND_NO_PORTS` | – | Hide live ports in the status line |
 | `RUNCOMMAND_PORTS_TTL_MS` | `2500` | How long a port scan is cached (ms) |
 | `RUNCOMMAND_IGNORE_PORTS` | `9229,9230` | Ports to never show (e.g. debuggers) |
-| `RUNCOMMAND_CLAUDE` | – | Path to the `claude` binary (else auto-resolved) |
+| `RUNCOMMAND_CLAUDE` | – | Path to the `claude` binary (alias for `RUNCOMMAND_AGENT_BIN` when the agent is `claude`) |
 | `NO_COLOR` | – | Disable ANSI color |
 
 ## Where the cache lives, and for how long
@@ -314,8 +387,8 @@ changes (off by default).
    `CLAUDE.md` (outside code fences) → used as-is.
 2. Otherwise, collect signals — `package.json` scripts, the package manager (from
    the `packageManager` field or the lockfile), the list of manifest/config
-   files, and a run hint from the README — and ask `claude -p` for the single
-   dev/run command.
+   files, and a run hint from the README — and ask the [detection agent](#detection-agent)
+   (`claude -p` by default) for the single dev/run command.
 3. Cache it against a hash of those signals. Next render is a cache hit until the
    signals change.
 

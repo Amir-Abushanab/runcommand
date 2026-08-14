@@ -3,10 +3,11 @@
  * runcommand — show each project's run command in the Claude Code status bar.
  *
  * It figures out the single "how do I start this project" command with a quick
- * `claude -p` call, caches the answer per-project, and only re-asks when the
- * project's manifest actually changes. The status-line path never blocks on the
- * model: on a cache miss it kicks detection off in the background and shows a
- * placeholder until the answer lands.
+ * headless LLM call (Claude Code's `claude -p` by default; any agent via
+ * RUNCOMMAND_AGENT / RUNCOMMAND_DETECT_CMD), caches the answer per-project, and
+ * only re-asks when the project's manifest actually changes. The status-line path
+ * never blocks on the model: on a cache miss it kicks detection off in the
+ * background and shows a placeholder until the answer lands.
  *
  * Standalone and dependency-free (Node built-ins only). Coexists with any other
  * status-line tool via RUNCOMMAND_BASE (see `statusline` below) — it never
@@ -21,8 +22,9 @@
  *   help            usage
  *
  * Flags: -C/--project <dir>, --model <id>, --quiet
- * Env:   RUNCOMMAND_MODEL, RUNCOMMAND_BASE, RUNCOMMAND_ICON, RUNCOMMAND_LABEL,
- *        RUNCOMMAND_TTL_MS, NO_COLOR
+ * Env:   RUNCOMMAND_AGENT (claude|opencode|gemini|qwen|codex), RUNCOMMAND_DETECT_CMD,
+ *        RUNCOMMAND_AGENT_BIN, RUNCOMMAND_MODEL, RUNCOMMAND_BASE, RUNCOMMAND_ICON,
+ *        RUNCOMMAND_LABEL, RUNCOMMAND_TTL_MS, NO_COLOR
  */
 
 import fs from "node:fs";
@@ -33,7 +35,6 @@ import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const SELF = fileURLToPath(import.meta.url);
-const MODEL = process.env.RUNCOMMAND_MODEL || "haiku";
 const ICON = process.env.RUNCOMMAND_ICON ?? "▶";
 const LABEL = process.env.RUNCOMMAND_LABEL ?? ""; // e.g. "run: "
 const DETECT_TIMEOUT_MS = 90_000;
@@ -363,20 +364,94 @@ function formatCommandsCLI(commands) {
   return cmds.map((c) => (c.label ? c.label + ": " : "") + c.command).join("\n");
 }
 
-// Resolve the claude CLI without depending on the status line's PATH (which can
-// be minimal). Checks RUNCOMMAND_CLAUDE, then common install locations.
-let CLAUDE_BIN = null;
-function claudeBin() {
-  if (CLAUDE_BIN) return CLAUDE_BIN;
-  const candidates = [
-    process.env.RUNCOMMAND_CLAUDE,
-    path.join(os.homedir(), ".local/bin/claude"),
-    "/opt/homebrew/bin/claude",
-    "/usr/local/bin/claude",
-    path.join(os.homedir(), ".claude/local/claude"),
-  ].filter(Boolean);
-  for (const c of candidates) if (exists(c)) return (CLAUDE_BIN = c);
-  return (CLAUDE_BIN = "claude"); // last resort: rely on PATH
+// ---------- detection backend (configurable agent) ----------
+//
+// Detection only needs a CLI that takes our prompt and prints the model's text
+// answer (with <cmd> tags) to stdout. Claude Code (`claude -p`) is the default,
+// but any headless agent works: pick one with RUNCOMMAND_AGENT, or supply a full
+// command with RUNCOMMAND_DETECT_CMD. The prompt is always handed over as a single
+// argv element (never through a shell), so its newlines and quotes can't bite us.
+//
+// Each built-in agent maps to the flags that put it in one-shot/headless mode.
+// `pre(model)` is the args before the prompt; `model` is the default model —
+// empty means "let the agent use its own configured default" (only claude, which
+// defaults to a big model interactively, needs us to pick the cheap one).
+const AGENTS = {
+  claude:   { bin: "claude",   pre: (m) => ["-p", ...(m ? ["--model", m] : [])], model: "haiku" },
+  opencode: { bin: "opencode", pre: (m) => ["run", ...(m ? ["--model", m] : [])], model: "" },
+  gemini:   { bin: "gemini",   pre: (m) => [...(m ? ["-m", m] : []), "-p"],       model: "" },
+  qwen:     { bin: "qwen",     pre: (m) => [...(m ? ["-m", m] : []), "-p"],       model: "" },
+  codex:    { bin: "codex",    pre: (m) => ["exec", ...(m ? ["-m", m] : [])],     model: "" },
+};
+
+// Where agents commonly install, so we don't depend on the status line's PATH
+// (which can be minimal). We also scan $PATH as a fallback.
+const BIN_DIRS = [
+  path.join(os.homedir(), ".local/bin"),
+  "/opt/homebrew/bin",
+  "/usr/local/bin",
+  path.join(os.homedir(), ".claude/local"),
+];
+// Resolve a command to an absolute path, or null if it isn't installed. Checks an
+// explicit override, then the well-known dirs, then every entry on $PATH.
+function findBin(name, override) {
+  if (override && exists(override)) return override;
+  for (const dir of BIN_DIRS) { const p = path.join(dir, name); if (exists(p)) return p; }
+  for (const dir of (process.env.PATH || "").split(path.delimiter)) {
+    if (!dir) continue;
+    const p = path.join(dir, name);
+    if (exists(p)) return p;
+  }
+  return null;
+}
+
+// Detection tries agents in priority order and uses the first that's installed and
+// answers — so uninstalling Claude Code silently falls through to whatever else is
+// on the machine. Order comes from RUNCOMMAND_AGENT (a comma/space list) or this
+// default; unknown names are ignored, uninstalled ones skipped. A full
+// RUNCOMMAND_DETECT_CMD is an explicit single backend and bypasses the chain.
+const DEFAULT_AGENT_ORDER = ["claude", "opencode", "gemini", "qwen", "codex"];
+
+let AGENT_CHAIN = null;
+function agentChain() {
+  if (AGENT_CHAIN) return AGENT_CHAIN;
+  const custom = (process.env.RUNCOMMAND_DETECT_CMD || "").trim();
+  if (custom) {
+    const parts = custom.split(/\s+/).filter(Boolean);
+    return (AGENT_CHAIN = [{ name: parts[0] || "custom", custom: parts, model: "" }]);
+  }
+  const raw = (process.env.RUNCOMMAND_AGENT || "").trim();
+  const names = (raw ? raw.split(/[,\s]+/) : DEFAULT_AGENT_ORDER).map((n) => n.toLowerCase()).filter(Boolean);
+  const model = ARGS.model || process.env.RUNCOMMAND_MODEL || "";
+  const chain = [];
+  for (const name of names) {
+    const spec = AGENTS[name];
+    if (!spec) continue; // unknown agent name
+    const override = process.env.RUNCOMMAND_AGENT_BIN || (name === "claude" ? process.env.RUNCOMMAND_CLAUDE : "");
+    const bin = findBin(spec.bin, override);
+    if (!bin) continue; // not installed — try the next one
+    const useModel = model || spec.model;
+    chain.push({ name, bin, pre: spec.pre(useModel), model: useModel });
+  }
+  // Nothing named is installed: still attempt the first choice via bare PATH so we
+  // fail the same graceful way a single missing agent always has.
+  if (chain.length === 0) {
+    const first = names.find((n) => AGENTS[n]) || "claude";
+    const useModel = model || AGENTS[first].model;
+    chain.push({ name: first, bin: AGENTS[first].bin, pre: AGENTS[first].pre(useModel), model: useModel });
+  }
+  return (AGENT_CHAIN = chain);
+}
+
+// [bin, argv] to run one chain entry with our prompt as the final argument.
+function invocationFor(entry, prompt) {
+  if (entry.custom) {
+    const parts = entry.custom.slice();
+    const slot = parts.indexOf("{}");
+    if (slot !== -1) parts[slot] = prompt; else parts.push(prompt);
+    return [parts[0], parts.slice(1)];
+  }
+  return [entry.bin, [...entry.pre, prompt]];
 }
 
 function detect(root, { quiet = false, note, clearNote = false } = {}) {
@@ -398,20 +473,31 @@ function detect(root, { quiet = false, note, clearNote = false } = {}) {
     return { commands: [], source: "empty" };
   }
   const prompt = buildPrompt(sig, activeNote);
-  const model = ARGS.model || MODEL;
-  // Run in the target root so any ambient project context claude loads belongs
-  // to THIS project — not the dir the status line happened to be invoked from.
-  const res = spawnSync(claudeBin(), ["-p", prompt, "--model", model], {
-    cwd: root, encoding: "utf8", timeout: DETECT_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024,
-  });
-  if (res.error || res.status !== 0) {
-    stripAnsiSafeLog("claude -p failed:", res.error ? res.error.message : (res.stderr || "").trim().slice(0, 200));
-    // Keep any previous answer; don't poison the cache.
-    return prev ? { commands: normalizeCommands(prev), source: prev.source } : null;
+  const chain = agentChain();
+  // Try each available agent in priority order. Run in the target root so any
+  // ambient project context the agent loads belongs to THIS project — not the dir
+  // the status line happened to be invoked from. A process failure (missing/broken
+  // agent) falls through to the next; a clean exit is the answer, even when empty
+  // (a genuine "no run command"), so we never cascade past a real result.
+  for (const entry of chain) {
+    const [bin, argv] = invocationFor(entry, prompt);
+    const res = spawnSync(bin, argv, {
+      cwd: root, encoding: "utf8", timeout: DETECT_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024,
+      // We always pass the prompt as an argument; detach stdin so an agent can't
+      // block waiting on it (or fold an empty piped stdin into its prompt).
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    if (res.error || res.status !== 0) {
+      const more = chain.length > 1 ? " — trying next agent" : "";
+      stripAnsiSafeLog(`detect via ${entry.name} failed${more}:`, res.error ? res.error.message : (res.stderr || "").trim().slice(0, 200));
+      continue;
+    }
+    const commands = parseCommands(res.stdout);
+    saveCache(root, { commands, source: "llm", model: entry.model || "", agent: entry.name, note: activeNote, signalsHash: hash, detectedAt: Date.now() });
+    return { commands, source: "llm" };
   }
-  const commands = parseCommands(res.stdout);
-  saveCache(root, { commands, source: "llm", model, note: activeNote, signalsHash: hash, detectedAt: Date.now() });
-  return { commands, source: "llm" };
+  // Every agent failed — keep any previous answer; don't poison the cache.
+  return prev ? { commands: normalizeCommands(prev), source: prev.source } : null;
 }
 
 // ---------- background trigger ----------
@@ -581,7 +667,7 @@ function statusline(rawStdin) {
 
 // ---------- CLI ----------
 
-const ARGS = { _: [], model: null, project: null, note: null, clearHint: false, quiet: false, locked: false, all: false, json: false, links: false, urls: false };
+const ARGS = { _: [], model: null, project: null, note: null, clearHint: false, quiet: false, locked: false, all: false, json: false, links: false, urls: false, yes: false, dryRun: false, probe: false, surfaces: null };
 function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -595,6 +681,10 @@ function parseArgs(argv) {
     else if (a === "--json") ARGS.json = true;
     else if (a === "--links") ARGS.links = true;
     else if (a === "--urls") { ARGS.links = true; ARGS.urls = true; }
+    else if (a === "--yes" || a === "-y") ARGS.yes = true;
+    else if (a === "--dry-run") ARGS.dryRun = true;
+    else if (a === "--probe") ARGS.probe = true;
+    else if (a === "--surfaces") ARGS.surfaces = (argv[++i] || "").split(/[,\s]+/).filter(Boolean);
     else ARGS._.push(a);
   }
 }
@@ -610,10 +700,13 @@ Usage:
   runcommand statusline           render run command + live ports (stdin = Claude Code JSON)
   runcommand prompt [dir]         plain run command for a shell prompt (non-blocking)
   runcommand ports [dir]          project's live localhost ports  (--links --json --all)
-  runcommand detect [dir]         detect now (calls claude -p), print + cache
+  runcommand detect [dir]         detect now (asks the configured agent), print + cache
   runcommand get [dir]            print cached command (detect if missing)
   runcommand refresh [dir]        re-detect and overwrite the cache
   runcommand path [dir]           print the cache file path
+  runcommand init                 wire runcommand into your installed tools (--yes --dry-run --surfaces)
+  runcommand uninstall            remove runcommand's wiring (--dry-run)
+  runcommand agents               show the detection agent chain — which are installed (--probe to test)
   runcommand help
 
 Flags: -C/--project <dir>   --model <id>   --quiet
@@ -622,8 +715,12 @@ Flags: -C/--project <dir>   --model <id>   --quiet
        --clear-hint             forget a previously saved hint
        --links  ":PORT" OSC 8 links   --urls  full "http://localhost:PORT" (auto-linkified)
        --json  ports as JSON   --all  all localhost ports
-Env:   RUNCOMMAND_MODEL (default: haiku)   RUNCOMMAND_BASE (chain another status line)
-       RUNCOMMAND_ICON   RUNCOMMAND_LABEL   RUNCOMMAND_TTL_MS   NO_COLOR
+Env:   RUNCOMMAND_AGENT   priority list tried in order, first installed wins,
+                          e.g. "opencode,claude"; default tries claude→opencode→gemini→qwen→codex
+       RUNCOMMAND_DETECT_CMD ("opencode run", "{}" = prompt slot)   RUNCOMMAND_AGENT_BIN
+       RUNCOMMAND_MODEL (default: haiku for claude, else the agent's own default)
+       RUNCOMMAND_BASE (chain another status line)   RUNCOMMAND_ICON   RUNCOMMAND_LABEL
+       RUNCOMMAND_TTL_MS   NO_COLOR
        RUNCOMMAND_PORT_STYLE (url|compact)   RUNCOMMAND_NO_PORTS   RUNCOMMAND_PORTS_TTL_MS
 
 Per-project override (instant, no model call): a .claude-run file — one command
@@ -635,6 +732,275 @@ async function readStdin() {
   const chunks = [];
   for await (const c of process.stdin) chunks.push(c);
   return Buffer.concat(chunks).toString("utf8");
+}
+
+// ---------- init / uninstall (wire runcommand into your tools) ----------
+
+// How a config file should call runcommand: a bare `runcommand` if it's on PATH,
+// else this script through node.
+function selfInvocation() {
+  return findBin("runcommand") ? "runcommand" : `node ${JSON.stringify(SELF)}`;
+}
+// Single-quote a string for a POSIX shell — for RUNCOMMAND_BASE='<existing>'.
+function shq(s) { return "'" + String(s).replace(/'/g, "'\\''") + "'"; }
+// Recognize our own wiring in either invocation form (bare or node-script).
+function isOurs(cmd) {
+  return !!cmd && /statusline/.test(cmd) && (cmd.includes("runcommand statusline") || cmd.includes(path.basename(SELF)));
+}
+function backupFile(file) {
+  if (!exists(file)) return null;
+  const bak = `${file}.${Date.now()}.runcommand-bak`;
+  fs.copyFileSync(file, bak);
+  return bak;
+}
+
+// Harnesses whose status line is a JSON "command" field: a surgical merge that
+// preserves every other setting. The coexistence wrap keeps any status line you
+// already had — runcommand renders it above its own via RUNCOMMAND_BASE.
+const JSON_HARNESSES = [
+  {
+    key: "claude", label: "Claude Code",
+    file: path.join(os.homedir(), ".claude", "settings.json"),
+    installed: () => exists(path.join(os.homedir(), ".claude")) || !!findBin("claude"),
+    envPrefix: "",
+    get: (j) => j.statusLine && j.statusLine.command,
+    set: (j, cmd) => { j.statusLine = Object.assign({ padding: 0 }, j.statusLine, { type: "command", command: cmd }); },
+    del: (j) => { delete j.statusLine; },
+  },
+  {
+    key: "qwen", label: "Qwen Code",
+    file: path.join(os.homedir(), ".qwen", "settings.json"),
+    installed: () => exists(path.join(os.homedir(), ".qwen")) || !!findBin("qwen"),
+    envPrefix: "RUNCOMMAND_PORT_STYLE=url ", // Qwen strips OSC 8; url keeps ports clickable
+    get: (j) => j.ui && j.ui.statusLine && j.ui.statusLine.command,
+    set: (j, cmd) => { j.ui = j.ui || {}; j.ui.statusLine = Object.assign({}, j.ui.statusLine, { type: "command", command: cmd }); },
+    del: (j) => { if (j.ui) delete j.ui.statusLine; },
+  },
+];
+function desiredCommand(h, existing) {
+  const ours = h.envPrefix + selfInvocation() + " statusline";
+  if (!existing) return ours;             // nothing there: install fresh
+  if (isOurs(existing)) return existing;  // already ours (any form): leave it
+  return `RUNCOMMAND_BASE=${shq(existing)} ${ours}`; // wrap someone else's line
+}
+function planJson(h) {
+  const existing = h.get(readJson(h.file) || {}) || "";
+  const to = desiredCommand(h, existing);
+  const action = to === existing ? "none" : existing ? "wrap" : "add";
+  return { h, file: h.file, existing, to, action };
+}
+function applyJson(plan) {
+  const j = readJson(plan.h.file) || {};
+  plan.h.set(j, plan.to);
+  fs.mkdirSync(path.dirname(plan.file), { recursive: true });
+  const bak = backupFile(plan.file);
+  fs.writeFileSync(plan.file, JSON.stringify(j, null, 2) + "\n");
+  return bak;
+}
+function unwireJson(h) {
+  if (!exists(h.file)) return { action: "none" };
+  const j = readJson(h.file) || {};
+  const existing = h.get(j) || "";
+  if (!isOurs(existing)) return { action: "none" };
+  const m = existing.match(/RUNCOMMAND_BASE=('([^']*)'|"([^"]*)"|(\S+))\s/);
+  const base = m ? (m[2] ?? m[3] ?? m[4]) : null;
+  if (base) h.set(j, base); else h.del(j);
+  const bak = backupFile(h.file);
+  fs.writeFileSync(h.file, JSON.stringify(j, null, 2) + "\n");
+  return { action: base ? "unwrapped" : "removed", file: h.file, bak };
+}
+
+// starship: append a [custom.runcommand] block, fenced with markers so uninstall
+// removes exactly what init added and never touches a hand-written one.
+const STARSHIP_FILE = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "starship.toml");
+const STARSHIP = { key: "starship", label: "starship", file: STARSHIP_FILE, installed: () => !!findBin("starship") || exists(STARSHIP_FILE) };
+const STAR_BEGIN = "# >>> runcommand (managed by `runcommand init`)";
+const STAR_END = "# <<< runcommand";
+function starshipBlock() {
+  return [
+    STAR_BEGIN,
+    "[custom.runcommand]",
+    `command = ${JSON.stringify(selfInvocation() + " promptline")}`,
+    'format = "$output"',
+    'shell = ["bash", "--noprofile", "--norc"]',
+    "ignore_timeout = true", // promptline can outlast starship's 500ms global cap
+    STAR_END,
+    "",
+  ].join("\n");
+}
+function planStarship() {
+  const cur = exists(STARSHIP_FILE) ? fs.readFileSync(STARSHIP_FILE, "utf8") : "";
+  const action = (cur.includes("[custom.runcommand]") || cur.includes(STAR_BEGIN)) ? "none" : "add";
+  return { file: STARSHIP_FILE, action };
+}
+function applyStarship() {
+  fs.mkdirSync(path.dirname(STARSHIP_FILE), { recursive: true });
+  const bak = backupFile(STARSHIP_FILE);
+  const cur = exists(STARSHIP_FILE) ? fs.readFileSync(STARSHIP_FILE, "utf8") : "";
+  const sep = cur ? (cur.endsWith("\n") ? "\n" : "\n\n") : "";
+  fs.writeFileSync(STARSHIP_FILE, cur + sep + starshipBlock());
+  return bak;
+}
+function unwireStarship() {
+  if (!exists(STARSHIP_FILE)) return { action: "none" };
+  const cur = fs.readFileSync(STARSHIP_FILE, "utf8");
+  const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`\\n*${esc(STAR_BEGIN)}[\\s\\S]*?${esc(STAR_END)}\\n?`, "g");
+  if (!re.test(cur)) return { action: "none" };
+  const bak = backupFile(STARSHIP_FILE);
+  fs.writeFileSync(STARSHIP_FILE, cur.replace(re, "\n"));
+  return { action: "removed", file: STARSHIP_FILE, bak };
+}
+
+const CONFIG_HOME = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+function manualNotes(say) {
+  if (!!findBin("opencode") || exists(path.join(CONFIG_HOME, "opencode"))) {
+    say(`\n• OpenCode detected — it renders via a plugin, not a status-line command.`);
+    say(`  See the README "Other agents and prompts" for the drop-in plugin;`);
+    say(`  this installer doesn't manage plugins.`);
+  }
+  if (!!findBin("codex") || exists(path.join(os.homedir(), ".codex"))) {
+    say(`\n• Codex detected — a native status line is pending (openai/codex#17827).`);
+    say(`  Until then use the /runcommand prompt; see the README.`);
+  }
+}
+async function confirm(rl, q) {
+  if (!rl) return true; // non-interactive (--yes): assume yes
+  const a = (await new Promise((r) => rl.question(q, r))).trim().toLowerCase();
+  return a === "" || a === "y" || a === "yes";
+}
+
+async function runInit() {
+  const dry = ARGS.dryRun;
+  const say = (s = "") => process.stdout.write(s + "\n");
+  const auto = [...JSON_HARNESSES, STARSHIP];
+  const interactive = !!process.stdin.isTTY && !ARGS.yes;
+  if (!interactive && !ARGS.yes && !dry) {
+    say("runcommand init: run in a terminal, or pass --yes to apply (or --dry-run to preview).");
+    return;
+  }
+  const rl = interactive ? (await import("node:readline")).createInterface({ input: process.stdin, output: process.stdout }) : null;
+  try {
+    say(`\nruncommand init — wire the run-command line into your tools\n`);
+    // 1. PATH
+    const onPath = findBin("runcommand");
+    if (onPath) say(`✓ runcommand on PATH: ${onPath}`);
+    else {
+      const target = path.join(os.homedir(), ".local", "bin", "runcommand");
+      say(`• runcommand isn't on your PATH; configs will call it via: ${selfInvocation()}`);
+      if (dry) say(`  [dry-run] could symlink ${target} → this script`);
+      else if (await confirm(rl, `  Symlink ${target} → this script? [Y/n] `)) {
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        try { fs.unlinkSync(target); } catch {}
+        fs.symlinkSync(SELF, target);
+        say(`  ✓ linked ${target} (ensure ~/.local/bin is on your PATH)`);
+      } else say(`  (skipped PATH symlink)`);
+    }
+    // 2. pick surfaces
+    let picks;
+    if (ARGS.surfaces) picks = auto.filter((h) => ARGS.surfaces.includes(h.key));
+    else if (!interactive) picks = auto.filter((h) => h.installed());
+    else {
+      say(`\nHarnesses:`);
+      auto.forEach((h, i) => say(`  ${i + 1}. ${h.label}${h.installed() ? "  (installed)" : ""}`));
+      const a = (await new Promise((r) => rl.question(`\nWire which? numbers, or Enter for all installed: `, r))).trim();
+      picks = a ? a.split(/[,\s]+/).map((n) => auto[parseInt(n, 10) - 1]).filter(Boolean) : auto.filter((h) => h.installed());
+    }
+    if (!picks.length) { say(`\nNothing to wire.`); manualNotes(say); return; }
+    say(`\nWiring: ${picks.map((h) => h.label).join(", ")}`);
+    // 3. apply
+    for (const h of picks) {
+      if (h === STARSHIP) {
+        const p = planStarship();
+        if (p.action === "none") { say(`\n  ${h.label}: already wired — ${p.file}`); continue; }
+        say(`\n  ${h.label}: append [custom.runcommand] → ${p.file}`);
+        if (dry) { say(`    [dry-run] not written`); continue; }
+        if (!(await confirm(rl, `    apply? [Y/n] `))) { say(`    skipped`); continue; }
+        const bak = applyStarship();
+        say(`    ✓ appended${bak ? `  (backup: ${path.basename(bak)})` : ""}`);
+        continue;
+      }
+      const p = planJson(h);
+      if (p.action === "none") { say(`\n  ${h.label}: already wired — ${p.file}`); continue; }
+      say(`\n  ${h.label}: ${p.file}`);
+      if (p.action === "wrap") say(`    (keeps your current status line; runcommand renders beneath it)`);
+      say(`    statusLine.command = ${p.to}`);
+      if (dry) { say(`    [dry-run] not written`); continue; }
+      if (!(await confirm(rl, `    apply? [Y/n] `))) { say(`    skipped`); continue; }
+      const bak = applyJson(p);
+      say(`    ✓ wired${bak ? `  (backup: ${path.basename(bak)})` : ""}`);
+    }
+    manualNotes(say);
+    // 4. agent chain summary
+    const chain = DEFAULT_AGENT_ORDER.filter((n) => findBin(AGENTS[n].bin));
+    say(`\nDetection tries (first available wins): ${chain.join(" → ") || "no agents found"}`);
+    say(`  Reorder/pin with RUNCOMMAND_AGENT (e.g. RUNCOMMAND_AGENT=opencode,claude).`);
+    say(`  Re-check installed agents anytime: runcommand agents`);
+    say(`\nDone${dry ? " (dry-run — nothing written)" : ""}. Restart your terminal / harness.`);
+  } finally { if (rl) rl.close(); }
+}
+
+async function runUninstall() {
+  const dry = ARGS.dryRun;
+  const say = (s = "") => process.stdout.write(s + "\n");
+  say(`\nruncommand uninstall — remove wiring\n`);
+  for (const h of JSON_HARNESSES) {
+    const existing = exists(h.file) ? (h.get(readJson(h.file) || {}) || "") : "";
+    if (!isOurs(existing)) { say(`  ${h.label}: not wired by runcommand — left alone`); continue; }
+    const wrapped = /RUNCOMMAND_BASE=/.test(existing);
+    if (dry) { say(`  ${h.label}: [dry-run] would ${wrapped ? "restore your previous status line" : "remove statusLine"} — ${h.file}`); continue; }
+    const r = unwireJson(h);
+    say(`  ${h.label}: ${r.action === "unwrapped" ? "restored your previous status line" : "removed statusLine"} — ${h.file}${r.bak ? `  (backup: ${path.basename(r.bak)})` : ""}`);
+  }
+  const starCur = exists(STARSHIP_FILE) ? fs.readFileSync(STARSHIP_FILE, "utf8") : "";
+  if (starCur.includes(STAR_BEGIN)) {
+    if (dry) say(`  starship: [dry-run] would remove [custom.runcommand] — ${STARSHIP_FILE}`);
+    else { const r = unwireStarship(); say(`  starship: removed [custom.runcommand] — ${STARSHIP_FILE}${r.bak ? `  (backup: ${path.basename(r.bak)})` : ""}`); }
+  } else if (starCur.includes("[custom.runcommand]")) {
+    say(`  starship: a [custom.runcommand] exists but wasn't added by init (no marker) — left alone`);
+  } else say(`  starship: not wired by runcommand — left alone`);
+  say(`\nDone${dry ? " (dry-run)" : ""}. Backups (*.runcommand-bak) are kept next to each file.`);
+}
+
+// Inspect the detection chain: which agents are installed, in what order, which
+// one wins. --probe additionally calls each installed agent to confirm it responds
+// (installed ≠ authenticated/working).
+function runAgents() {
+  const say = (s = "") => process.stdout.write(s + "\n");
+  const binOf = (n) => findBin(AGENTS[n].bin, n === "claude" ? process.env.RUNCOMMAND_CLAUDE : process.env.RUNCOMMAND_AGENT_BIN);
+  say("\nDetection agents\n");
+  const custom = (process.env.RUNCOMMAND_DETECT_CMD || "").trim();
+  if (custom) {
+    say("  A custom command is set (RUNCOMMAND_DETECT_CMD) — it bypasses the chain:");
+    say(`    ${custom}\n`);
+    return;
+  }
+  const chain = agentChain();
+  const inChain = new Set(chain.map((e) => e.name));
+  say("  Will try, in order:");
+  if (!chain.length) say("    (none found)");
+  chain.forEach((e, i) => say(`    ${i + 1}. ${e.name.padEnd(9)} ${e.bin}   (model: ${e.model || "agent default"})`));
+  const idle = DEFAULT_AGENT_ORDER.filter((n) => !inChain.has(n) && binOf(n));
+  const missing = DEFAULT_AGENT_ORDER.filter((n) => !inChain.has(n) && !binOf(n));
+  if (idle.length) say(`\n  Installed but excluded by RUNCOMMAND_AGENT: ${idle.join(", ")}`);
+  if (missing.length) say(`\n  Not installed: ${missing.join(", ")}`);
+  const raw = (process.env.RUNCOMMAND_AGENT || "").trim();
+  say(`\n  Order source: ${raw ? `RUNCOMMAND_AGENT=${raw}` : "default (claude→opencode→gemini→qwen→codex)"}`);
+  if (process.env.RUNCOMMAND_MODEL) say(`  RUNCOMMAND_MODEL=${process.env.RUNCOMMAND_MODEL} (applied to whichever agent runs)`);
+  if (ARGS.probe) {
+    say("\n  Probing (one tiny call per installed agent)…");
+    for (const e of chain) {
+      const [bin, argv] = invocationFor(e, "Reply with exactly this and nothing else: <cmd>pong</cmd>");
+      const t0 = Date.now();
+      const res = spawnSync(bin, argv, { cwd: process.cwd(), encoding: "utf8", timeout: 30_000, maxBuffer: 4 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
+      const ran = !res.error && res.status === 0;
+      const ok = ran && /<cmd>\s*pong\s*<\/cmd>/i.test(res.stdout || "");
+      say(`    ${ok ? "✓" : ran ? "~" : "✗"} ${e.name.padEnd(9)} ${ok ? "responds" : ran ? "ran, unexpected output" : "failed"}  (${Date.now() - t0}ms)`);
+    }
+  } else {
+    say(`\n  Add --probe to call each installed agent and confirm it actually responds.`);
+  }
+  say("");
 }
 
 async function main() {
@@ -713,6 +1079,9 @@ async function main() {
       process.stdout.write(cachePathFor(resolveTarget()) + "\n");
       break;
     }
+    case "init": await runInit(); break;
+    case "uninstall": await runUninstall(); break;
+    case "agents": case "agent": runAgents(); break;
     case "help": case "--help": case "-h": default:
       process.stdout.write(HELP + "\n");
   }
