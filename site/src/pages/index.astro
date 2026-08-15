@@ -18,13 +18,16 @@ const favImg = (file) => `<img class="tool-fav" src="${base}/favicons/${file}" a
 // A tool name linked to its site with its favicon. Omit `file` for no icon.
 const toolLink = (href, label, file) => `<a class="tool-link" href="${href}" target="_blank" rel="noopener">${file ? favImg(file) : ""}<span>${label}</span></a>`;
 
+// Each card its own hue from a cyan→violet ramp — distinct, but all in the
+// blue-green-violet family around the cyan brand. light-dark() pairs so each reads
+// on both grounds.
 const features = [
-  { icon: "◆", title: "LLM-detected", body: "A quick headless call to your AI CLI — Claude by default; Gemini, Cursor, OpenCode, and more — reads your package.json scripts, lockfile and manifests to work out the real dev command: pnpm dev, cargo run, mix phx.server, docker compose up." },
-  { icon: "⚡", title: "Cached, never blocking", body: "Detected once, then cached per project. The status line is a ~50ms cache read; detection runs in the background." },
-  { icon: "↻", title: "Self-healing", body: "The cache is keyed to a fingerprint of your manifests. Edit a Makefile target or a package.json script and it re-detects on the next render. Nothing to remember." },
-  { icon: "◉", title: "Live ports", body: "Shows the localhost servers actually running for this project, scoped by process working dir, as clickable links. Databases and other projects don't leak in." },
-  { icon: "▤", title: "Runs everywhere", body: `One CLI across ${toolLink("https://claude.com/claude-code", "Claude Code", "claude.svg")}, ${toolLink("https://starship.rs", "starship", "starship.png")}, ${toolLink("https://opencode.ai", "OpenCode", "opencode.svg")}, and ${toolLink("https://github.com/QwenLM/qwen-code", "Qwen Code", "qwen.png")}, plus ${toolLink("https://github.com/openai/codex", "Codex")} once it ships a status-line hook. No hook? It rides your tmux/zellij status bar or shell prompt — around any TUI, aider and goose included.` },
-  { icon: "✦", title: "Colorblind-safe", body: "Each service in a monorepo gets its own colour from a colorblind-safe palette. Labels tell them apart even when the colours can't." },
+  { icon: "◆", color: "light-dark(#0e7490,#22d3ee)", title: "LLM-detected", body: "A quick headless call to your AI CLI — Claude by default; Gemini, Cursor, OpenCode, and more — reads your package.json scripts, lockfile and manifests to work out the real dev command: pnpm dev, cargo run, mix phx.server, docker compose up." },
+  { icon: "↯", color: "light-dark(#0f766e,#2dd4bf)", title: "Cached, never blocking", body: "Detected once, then cached per project. The status line is a ~50ms cache read; detection runs in the background." },
+  { icon: "↻", color: "light-dark(#0369a1,#38bdf8)", title: "Self-healing", body: "The cache is keyed to a fingerprint of your manifests. Edit a Makefile target or a package.json script and it re-detects on the next render. Nothing to remember." },
+  { icon: "◉", color: "light-dark(#1d4ed8,#60a5fa)", title: "Live ports", body: "Shows the localhost servers actually running for this project, scoped by process working dir, as clickable links. Databases and other projects don't leak in." },
+  { icon: "▤", color: "light-dark(#4f46e5,#818cf8)", title: "Runs everywhere", body: `One CLI across ${toolLink("https://claude.com/claude-code", "Claude Code", "claude.svg")}, ${toolLink("https://starship.rs", "starship", "starship.png")}, ${toolLink("https://opencode.ai", "OpenCode", "opencode.svg")}, and ${toolLink("https://github.com/QwenLM/qwen-code", "Qwen Code", "qwen.png")}, plus ${toolLink("https://github.com/openai/codex", "Codex")} once it ships a status-line hook. No hook? It rides your tmux/zellij status bar or shell prompt — around any TUI, aider and goose included.` },
+  { icon: "✦", color: "light-dark(#7c3aed,#a78bfa)", title: "Colorblind-safe", body: "Each service in a monorepo gets its own colour from a colorblind-safe palette. Labels tell them apart even when the colours can't." },
 ];
 
 const steps = [
@@ -145,7 +148,7 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
         <ul class="cards" role="list">
           {features.map((f) => (
             <li class="card">
-              <span class="card-icon" aria-hidden="true">{f.icon}</span>
+              <span class="card-icon" aria-hidden="true" style={`color:${f.color}`}>{f.icon}</span>
               <h3>{f.title}</h3>
               <p set:html={f.body}></p>
             </li>
@@ -194,24 +197,67 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
         <p class="lead" set:html={surfacesLead}></p>
 
         <div class="surface-grid">
-          <Terminal title="starship · shell prompt" caption="A right-aligned tagline; ports clickable via OSC 8.">
-<span class="ln"><span class="row"><span><span class="magenta">~/Code/principlestash.com</span> <span class="dim">on</span> <span class="blue"> main</span></span><span><span class="dim">▶</span> <span class="cyan">pnpm dev</span> <span class="dim">·</span> <a href="http://localhost:5173">:5173</a></span></span></span>
-<span class="ln"><span class="green">❯</span> <span class="dim">▍</span></span>
-          </Terminal>
+          <!-- Claude Code: tool-call transcript, bordered prompt, status line -->
+          <figure class="sfc-fig">
+            <div class="sfc">
+              <div class="sfc-tt"><span class="sfc-dots"><i></i><i></i><i></i></span><span class="sfc-ttl">principlestash — claude</span></div>
+              <div class="sfc-body">
+                <span class="ln"><span class="c-ok">⏺</span> Read(<span class="c-path">package.json</span>)</span>
+                <span class="ln sfc-ind c-dim">⎿ 3 dev scripts — web, api, jobs</span>
+                <span class="ln sfc-cc-prompt"><span class="c-claude">&gt;</span> how do I run this?</span>
+                <span class="ln c-dim">opus · principlestash · 42% context</span>
+                <span class="ln"><span class="c-dim">▶</span> <span class="c-dim">web:</span> <span class="c-cmd">pnpm dev</span> <span class="c-dim">·</span> <span class="c-dim">api:</span> <span class="c-magenta">mix phx.server</span> <span class="c-dim">·</span> <span class="c-dim">jobs:</span> <span class="c-green">cargo run</span></span>
+              </div>
+            </div>
+            <figcaption>Claude Code — one line per service, each its own colour.</figcaption>
+          </figure>
 
-          <Terminal title="OpenCode · TUI footer" caption="A native Solid plugin rendering into app_bottom.">
-<span class="ln"><span class="dim">◍ claude-sonnet · 18% · 2m04s</span></span>
-<span class="ln"><span class="dim">▶</span> <span class="cyan">bun dev</span>  <span class="dim">◉</span> <a href="http://localhost:3000">:3000</a></span>
-          </Terminal>
+          <!-- starship: colored prompt segments + the run tagline -->
+          <figure class="sfc-fig">
+            <div class="sfc">
+              <div class="sfc-tt"><span class="sfc-dots"><i></i><i></i><i></i></span><span class="sfc-ttl">zsh</span></div>
+              <div class="sfc-body">
+                <span class="ln"><span class="row"><span><span class="c-dir">~/Code/principlestash.com</span> <span class="c-dim">on</span> <span class="c-git"> main</span></span><span><span class="c-dim">▶</span> <span class="c-cmd">pnpm dev</span> <span class="c-dim">·</span> <a href="http://localhost:5173">:5173</a></span></span></span>
+                <span class="ln"><span class="c-ok">❯</span> <span class="c-dim">▍</span></span>
+              </div>
+            </div>
+            <figcaption>starship — a right-aligned tagline; ports clickable via OSC 8.</figcaption>
+          </figure>
 
-          <Terminal title="monorepo · distinct services" caption="Any stack, each its own colour and label.">
-<span class="ln"><span class="dim">▶</span> <span class="dim">web:</span> <span class="cyan">pnpm dev</span> <span class="dim">·</span> <span class="dim">api:</span> <span class="magenta">mix phx.server</span> <span class="dim">·</span> <span class="dim">jobs:</span> <span class="green">cargo run</span></span>
-          </Terminal>
+          <!-- OpenCode: session pill + host-owned bottom bar -->
+          <figure class="sfc-fig">
+            <div class="sfc">
+              <div class="sfc-tt"><span class="sfc-dots"><i></i><i></i><i></i></span><span class="sfc-ttl">principlestash — opencode</span></div>
+              <div class="sfc-body">
+                <span class="ln"><span class="oc-badge">opencode</span> <span class="c-dim">anthropic/claude-sonnet-4-5</span></span>
+                <span class="ln"><span class="c-cmd">▌</span> where does the dev server start?</span>
+                <span class="ln c-dim">  <span class="c-path">package.json</span> → the <span class="c-cmd">dev</span> script runs vite.</span>
+              </div>
+              <div class="oc-bar">
+                <span class="c-dim">~/principlestash.com</span>
+                <span><span class="c-dim">▶</span> <span class="c-cmd">bun dev</span>  <span class="c-dim">◉</span> <a href="http://localhost:3000">:3000</a></span>
+              </div>
+            </div>
+            <figcaption>OpenCode — a native plugin in the host-owned bottom bar.</figcaption>
+          </figure>
 
-          <Terminal title="first visit · non-blocking" caption="A placeholder while the background detect runs.">
-<span class="ln"><span class="dim">◆ opus · new-thing · 88%</span></span>
-<span class="ln"><span class="dim">▶ finding run command…</span></span>
-          </Terminal>
+          <!-- tmux: the iconic green status bar -->
+          <figure class="sfc-fig">
+            <div class="sfc">
+              <div class="sfc-tt"><span class="sfc-dots"><i></i><i></i><i></i></span><span class="sfc-ttl">tmux</span></div>
+              <div class="sfc-body">
+                <span class="ln"><span class="c-ok">$</span> aider</span>
+                <span class="ln c-dim">  Aider v0.86 · main · repo-map: 4k tokens</span>
+                <span class="ln c-dim">  <span class="c-cmd">architect&gt;</span> ▍</span>
+              </div>
+              <div class="tmux-bar">
+                <span class="tmux-sess">dev</span>
+                <span class="tmux-win">0:aider*  1:zsh</span>
+                <span class="tmux-right"><span>▶</span> pnpm dev · :5173</span>
+              </div>
+            </div>
+            <figcaption>tmux — in the status bar, so it shows even inside aider.</figcaption>
+          </figure>
         </div>
 
         <h3 class="compat-h">Clickable in every terminal</h3>
@@ -410,6 +456,48 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
 
     /* surfaces */
     .surface-grid { display: grid; gap: 1.3rem; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); margin-block-start: 1.5rem; }
+
+    /* Surfaces are drawn in each host's own chrome (fixed dark, like a screenshot). */
+    .sfc-fig { margin: 0; display: grid; gap: 0.6rem; grid-template-rows: 1fr auto; }
+    .sfc {
+      container-type: inline-size;
+      display: flex; flex-direction: column; block-size: 100%;
+      background: #0d1117; border: 1px solid #30363d; border-radius: 12px;
+      overflow: hidden; box-shadow: 0 18px 50px -24px rgb(0 0 0 / 0.65); color: #c9d1d9;
+    }
+    .sfc-tt { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.8rem; background: #161b22; border-block-end: 1px solid #30363d; }
+    .sfc-dots { display: inline-flex; gap: 6px; }
+    .sfc-dots i { inline-size: 11px; block-size: 11px; border-radius: 50%; }
+    .sfc-dots i:nth-child(1) { background: #ff5f57; } .sfc-dots i:nth-child(2) { background: #febc2e; } .sfc-dots i:nth-child(3) { background: #28c840; }
+    .sfc-ttl { color: #8b949e; font-size: 0.78rem; font-family: var(--mono); }
+    .sfc-body { flex: 1; padding: 0.9rem 1rem; font-family: var(--mono); font-size: clamp(0.74rem, 2.5cqi, 0.9rem); line-height: 1.75; }
+    .sfc-body .ln { display: block; }
+    .sfc-body .row { display: flex; justify-content: space-between; gap: 2ch; flex-wrap: wrap; }
+    .sfc-ind { padding-inline-start: 1.1rem; }
+    .sfc-body a { color: #56d4dd; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
+    .sfc-body a:hover { text-decoration-style: solid; }
+    /* shared token colours */
+    .c-dim { color: #6e7681; } .c-cmd { color: #56d4dd; } .c-magenta { color: #d2a8ff; }
+    .c-green { color: #7ee787; } .c-dir { color: #79c0ff; } .c-git { color: #d2a8ff; }
+    .c-ok { color: #7ee787; } .c-path { color: #79c0ff; } .c-claude { color: #d97757; }
+    /* Claude Code: the bordered prompt box */
+    .sfc-cc-prompt { margin-block: 0.55rem; padding: 0.4rem 0.6rem; border: 1px solid #30363d; border-radius: 6px; color: #e6e6ea; }
+    /* OpenCode: session pill + host-owned bottom bar */
+    .oc-badge { background: #2a2a31; color: #c8c8d0; padding: 0.05rem 0.4rem; border-radius: 3px; margin-inline-end: 0.4rem; }
+    .oc-bar {
+      display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.2rem 1rem;
+      padding: 0.55rem 1rem; background: #1d1d22; border-block-start: 1px solid #2a2a31;
+      font-family: var(--mono); font-size: clamp(0.72rem, 2.4cqi, 0.86rem);
+    }
+    .oc-bar a { color: #56d4dd; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
+    /* tmux: the iconic green status bar */
+    .tmux-bar {
+      display: flex; align-items: center; gap: 0.6rem;
+      padding: 0.28rem 0.6rem; background: #4e9a06; color: #08260a;
+      font-family: var(--mono); font-size: clamp(0.72rem, 2.4cqi, 0.86rem); font-weight: 600;
+    }
+    .tmux-sess { background: #08260a; color: #a6e3a1; padding: 0.05rem 0.5rem; border-radius: 2px; }
+    .tmux-right { margin-inline-start: auto; }
 
     /* compatibility (merged into surfaces) */
     .logos { list-style: none; padding: 0; margin-block: 1.6rem; display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); }
