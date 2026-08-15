@@ -826,49 +826,61 @@ function unwireJson(h) {
   return { action: base ? "unwrapped" : "removed", file: h.file, bak };
 }
 
-// starship: append a [custom.runcommand] block, fenced with markers so uninstall
-// removes exactly what init added and never touches a hand-written one.
-const STARSHIP_FILE = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "starship.toml");
-const STARSHIP = { key: "starship", label: "starship", file: STARSHIP_FILE, installed: () => !!findBin("starship") || exists(STARSHIP_FILE) };
-const STAR_BEGIN = "# >>> runcommand (managed by `runcommand init`)";
-const STAR_END = "# <<< runcommand";
-function starshipBlock() {
-  return [
-    STAR_BEGIN,
-    "[custom.runcommand]",
-    `command = ${JSON.stringify(selfInvocation() + " promptline")}`,
-    'format = "$output"',
-    'shell = ["bash", "--noprofile", "--norc"]',
-    "ignore_timeout = true", // promptline can outlast starship's 500ms global cap
-    STAR_END,
-    "",
-  ].join("\n");
+// Append-block surfaces (starship, tmux): append a marker-fenced block to a config
+// file so uninstall removes exactly what init added and never touches a hand-written
+// config. Coexistence is native — starship shows custom modules alongside the rest,
+// and tmux's `set -ga` APPENDS to your existing status-right rather than clobbering it.
+const CONFIG_HOME = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+const MARK_BEGIN = "# >>> runcommand (managed by `runcommand init`)";
+const MARK_END = "# <<< runcommand";
+const STARSHIP_FILE = path.join(CONFIG_HOME, "starship.toml");
+const TMUX_FILE = exists(path.join(CONFIG_HOME, "tmux", "tmux.conf"))
+  ? path.join(CONFIG_HOME, "tmux", "tmux.conf")
+  : path.join(os.homedir(), ".tmux.conf");
+
+const BLOCK_HARNESSES = [
+  {
+    key: "starship", label: "starship", file: STARSHIP_FILE,
+    installed: () => !!findBin("starship") || exists(STARSHIP_FILE),
+    already: (cur) => cur.includes("[custom.runcommand]"),
+    block: () => [
+      "[custom.runcommand]",
+      `command = ${JSON.stringify(selfInvocation() + " promptline")}`,
+      'format = "$output"',
+      'shell = ["bash", "--noprofile", "--norc"]',
+      "ignore_timeout = true", // promptline can outlast starship's 500ms global cap
+    ],
+  },
+  {
+    key: "tmux", label: "tmux", file: TMUX_FILE,
+    installed: () => !!findBin("tmux") || exists(TMUX_FILE),
+    already: (cur) => /status-right.*runcommand/.test(cur),
+    block: () => [`set -ga status-right " #(${selfInvocation()} prompt -C '#{pane_current_path}')"`],
+  },
+];
+function blockText(h) { return [MARK_BEGIN, ...h.block(), MARK_END, ""].join("\n"); }
+function planBlock(h) {
+  const cur = exists(h.file) ? fs.readFileSync(h.file, "utf8") : "";
+  return { file: h.file, action: (cur.includes(MARK_BEGIN) || (h.already && h.already(cur))) ? "none" : "add" };
 }
-function planStarship() {
-  const cur = exists(STARSHIP_FILE) ? fs.readFileSync(STARSHIP_FILE, "utf8") : "";
-  const action = (cur.includes("[custom.runcommand]") || cur.includes(STAR_BEGIN)) ? "none" : "add";
-  return { file: STARSHIP_FILE, action };
-}
-function applyStarship() {
-  fs.mkdirSync(path.dirname(STARSHIP_FILE), { recursive: true });
-  const bak = backupFile(STARSHIP_FILE);
-  const cur = exists(STARSHIP_FILE) ? fs.readFileSync(STARSHIP_FILE, "utf8") : "";
+function applyBlock(h) {
+  fs.mkdirSync(path.dirname(h.file), { recursive: true });
+  const bak = backupFile(h.file);
+  const cur = exists(h.file) ? fs.readFileSync(h.file, "utf8") : "";
   const sep = cur ? (cur.endsWith("\n") ? "\n" : "\n\n") : "";
-  fs.writeFileSync(STARSHIP_FILE, cur + sep + starshipBlock());
+  fs.writeFileSync(h.file, cur + sep + blockText(h));
   return bak;
 }
-function unwireStarship() {
-  if (!exists(STARSHIP_FILE)) return { action: "none" };
-  const cur = fs.readFileSync(STARSHIP_FILE, "utf8");
+function unwireBlock(h) {
+  if (!exists(h.file)) return { action: "none" };
+  const cur = fs.readFileSync(h.file, "utf8");
   const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const re = new RegExp(`\\n*${esc(STAR_BEGIN)}[\\s\\S]*?${esc(STAR_END)}\\n?`, "g");
+  const re = new RegExp(`\\n*${esc(MARK_BEGIN)}[\\s\\S]*?${esc(MARK_END)}\\n?`, "g");
   if (!re.test(cur)) return { action: "none" };
-  const bak = backupFile(STARSHIP_FILE);
-  fs.writeFileSync(STARSHIP_FILE, cur.replace(re, "\n"));
-  return { action: "removed", file: STARSHIP_FILE, bak };
+  const bak = backupFile(h.file);
+  fs.writeFileSync(h.file, cur.replace(re, "\n"));
+  return { action: "removed", file: h.file, bak };
 }
-
-const CONFIG_HOME = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
 function manualNotes(say) {
   if (!!findBin("opencode") || exists(path.join(CONFIG_HOME, "opencode"))) {
     say(`\n• OpenCode detected — it renders via a plugin, not a status-line command.`);
@@ -889,7 +901,7 @@ async function confirm(rl, q) {
 async function runInit() {
   const dry = ARGS.dryRun;
   const say = (s = "") => process.stdout.write(s + "\n");
-  const auto = [...JSON_HARNESSES, STARSHIP];
+  const auto = [...JSON_HARNESSES, ...BLOCK_HARNESSES];
   const interactive = !!process.stdin.isTTY && !ARGS.yes;
   if (!interactive && !ARGS.yes && !dry) {
     say("runcommand init: run in a terminal, or pass --yes to apply (or --dry-run to preview).");
@@ -926,14 +938,15 @@ async function runInit() {
     say(`\nWiring: ${picks.map((h) => h.label).join(", ")}`);
     // 3. apply
     for (const h of picks) {
-      if (h === STARSHIP) {
-        const p = planStarship();
+      if (h.block) {
+        const p = planBlock(h);
         if (p.action === "none") { say(`\n  ${h.label}: already wired — ${p.file}`); continue; }
-        say(`\n  ${h.label}: append [custom.runcommand] → ${p.file}`);
+        say(`\n  ${h.label}: append runcommand block → ${p.file}`);
         if (dry) { say(`    [dry-run] not written`); continue; }
         if (!(await confirm(rl, `    apply? [Y/n] `))) { say(`    skipped`); continue; }
-        const bak = applyStarship();
+        const bak = applyBlock(h);
         say(`    ✓ appended${bak ? `  (backup: ${path.basename(bak)})` : ""}`);
+        if (h.key === "tmux") say(`    reload with: tmux source-file ${p.file}  (or restart tmux)`);
         continue;
       }
       const p = planJson(h);
@@ -968,13 +981,15 @@ async function runUninstall() {
     const r = unwireJson(h);
     say(`  ${h.label}: ${r.action === "unwrapped" ? "restored your previous status line" : "removed statusLine"} — ${h.file}${r.bak ? `  (backup: ${path.basename(r.bak)})` : ""}`);
   }
-  const starCur = exists(STARSHIP_FILE) ? fs.readFileSync(STARSHIP_FILE, "utf8") : "";
-  if (starCur.includes(STAR_BEGIN)) {
-    if (dry) say(`  starship: [dry-run] would remove [custom.runcommand] — ${STARSHIP_FILE}`);
-    else { const r = unwireStarship(); say(`  starship: removed [custom.runcommand] — ${STARSHIP_FILE}${r.bak ? `  (backup: ${path.basename(r.bak)})` : ""}`); }
-  } else if (starCur.includes("[custom.runcommand]")) {
-    say(`  starship: a [custom.runcommand] exists but wasn't added by init (no marker) — left alone`);
-  } else say(`  starship: not wired by runcommand — left alone`);
+  for (const h of BLOCK_HARNESSES) {
+    const cur = exists(h.file) ? fs.readFileSync(h.file, "utf8") : "";
+    if (cur.includes(MARK_BEGIN)) {
+      if (dry) say(`  ${h.label}: [dry-run] would remove the runcommand block — ${h.file}`);
+      else { const r = unwireBlock(h); say(`  ${h.label}: removed runcommand block — ${h.file}${r.bak ? `  (backup: ${path.basename(r.bak)})` : ""}`); }
+    } else if (h.already && h.already(cur)) {
+      say(`  ${h.label}: a runcommand config exists but wasn't added by init (no marker) — left alone`);
+    } else say(`  ${h.label}: not wired by runcommand — left alone`);
+  }
   say(`\nDone${dry ? " (dry-run)" : ""}. Backups (*.runcommand-bak) are kept next to each file.`);
 }
 

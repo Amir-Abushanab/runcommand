@@ -53,8 +53,8 @@ Or install it globally: `npm i -g .`. Prefer not to install at all? Every comman
 below also works as `node bin/runcommand.mjs <command>`.
 
 **Fastest setup — `runcommand init`:** it detects the tools you actually have
-(Claude Code, Qwen Code, starship), wires each one for you, backs up every file it
-touches, and preserves any status line you already run. Preview with
+(Claude Code, Qwen Code, starship, tmux), wires each one for you, backs up every file
+it touches, and preserves any status line you already run. Preview with
 `runcommand init --dry-run`; undo everything with `runcommand uninstall`. The sections
 below are the manual equivalents.
 
@@ -324,13 +324,13 @@ doesn't need to: an **ambient surface** shows the line *around* whatever's runni
 works for any tool in your terminal.
 
 **tmux** — put the run command in the status bar; it stays visible the whole time you're
-inside aider/goose/etc., and tracks the active pane's project. Compose it with your
-existing `status-right` rather than clobbering it:
+inside aider/goose/etc., and tracks the active pane's project. **`runcommand init` wires
+this for you** — it appends with `set -ga` so your existing `status-right` (clock, etc.)
+is kept, not clobbered. The manual equivalent:
 
 ```tmux
 # ~/.tmux.conf
-set -g status-right "#(runcommand prompt -C '#{pane_current_path}')  %H:%M"
-set -g status-interval 5
+set -ga status-right " #(runcommand prompt -C '#{pane_current_path}')"
 ```
 
 `runcommand prompt` prints the plain command (and nothing in non-project dirs, so the

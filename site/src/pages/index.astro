@@ -68,7 +68,7 @@ const tools = {
 };
 
 // Prose with inline tool links + favicons, injected via set:html.
-const installNote = `Detects the tools you have — ${toolLink(tools.claude, "Claude Code", "claude.svg")}, ${toolLink(tools.qwen, "Qwen", "qwen.png")}, ${toolLink(tools.starship, "starship", "starship.png")} — and wires each up, backing up every file it touches. Zero dependencies: just Node and your agent's CLI (<code>claude</code> by default). <a href="${repo}" rel="noopener">Full setup &rarr;</a>`;
+const installNote = `Detects the tools you have — ${toolLink(tools.claude, "Claude Code", "claude.svg")}, ${toolLink(tools.qwen, "Qwen", "qwen.png")}, ${toolLink(tools.starship, "starship", "starship.png")}, tmux — and wires each up, backing up every file it touches. Zero dependencies: just Node and your agent's CLI (<code>claude</code> by default). <a href="${repo}" rel="noopener">Full setup &rarr;</a>`;
 const surfacesLead = `One CLI speaking ${toolLink(tools.claude, "Claude Code", "claude.svg")}'s <code>statusLine</code> contract (JSON in, a line out). Everything that copied that contract gets it for free, plus a native ${toolLink(tools.opencode, "OpenCode", "opencode.svg")} plugin.`;
 
 const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 014 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48l-.01 2.2c0 .21.15.46.55.38A8 8 0 008 .2z";
