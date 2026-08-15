@@ -336,9 +336,23 @@ set -ga status-right " #(runcommand prompt -C '#{pane_current_path}')"
 `runcommand prompt` prints the plain command (and nothing in non-project dirs, so the
 segment just disappears). Append live ports with `#(runcommand ports -C '#{pane_current_path}')`.
 
-**Zellij** — its built-in status bar can't run commands, so use the
-[`zjstatus`](https://github.com/dj95/zjstatus) plugin's `command_*` fields pointed at
-`runcommand prompt`.
+**Zellij** — its built-in status bar can't run commands, so this needs the
+[`zjstatus`](https://github.com/dj95/zjstatus) plugin (download `zjstatus.wasm` into
+`~/.config/zellij/plugins/`). In your layout:
+
+```kdl
+pane size=1 borderless=true {
+    plugin location="file:~/.config/zellij/plugins/zjstatus.wasm" {
+        format_left                 "{command_runcommand}"
+        command_runcommand_command  "bash -lc 'runcommand prompt'"
+        command_runcommand_format   "{stdout}"
+        command_runcommand_interval "5"
+    }
+}
+```
+
+`runcommand init` detects zellij and prints these steps (it won't download the plugin
+for you). Note zjstatus runs the command from the session's directory, not per-pane.
 
 **Terminal title** — a universal fallback (shows in the tab/title bar even with no
 multiplexer, though some TUIs overwrite it). From a shell hook:

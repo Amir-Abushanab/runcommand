@@ -891,6 +891,17 @@ function manualNotes(say) {
     say(`\n• Codex detected — a native status line is pending (openai/codex#17827).`);
     say(`  Until then use the /runcommand prompt; see the README.`);
   }
+  if (!!findBin("zellij") || exists(path.join(CONFIG_HOME, "zellij"))) {
+    say(`\n• Zellij detected — its native status bar can't run commands, so wiring needs the`);
+    say(`  zjstatus plugin (a .wasm download + a layout change). This installer won't`);
+    say(`  download plugins; add to your layout:`);
+    say(`    plugin location="file:~/.config/zellij/plugins/zjstatus.wasm" {`);
+    say(`      format_left "{command_runcommand}"`);
+    say(`      command_runcommand_command "bash -lc '${selfInvocation()} prompt'"`);
+    say(`      command_runcommand_format "{stdout}"  command_runcommand_interval "5"`);
+    say(`    }`);
+    say(`  Full steps: README "Terminal multiplexers & ambient surfaces".`);
+  }
 }
 async function confirm(rl, q) {
   if (!rl) return true; // non-interactive (--yes): assume yes
