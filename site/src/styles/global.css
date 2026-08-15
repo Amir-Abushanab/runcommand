@@ -131,8 +131,6 @@ section { padding-block: clamp(3rem, 8vw, 5.5rem); }
 .term-body .cc-port { color: #56d4dd; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
 .term-body .cc-reveal { animation: cc-fade 0.28s ease both; }
 @keyframes cc-fade { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
-/* The hero widget replays on click. */
-#cc-widget { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { .term-body .cc-cursor { animation: none; } }
 
 /* Inline tool links with a favicon. The label carries the underline so the icon
