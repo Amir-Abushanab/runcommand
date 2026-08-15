@@ -269,7 +269,7 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
           <span class="foot-ver">v{version}{commit ? " · " : ""}{commit ? <a href={`${repo}/commit/${commit}`} rel="noopener">{commit}</a> : null}</span>
         </span>
         <span class="foot-links">
-          <a href="https://principlestash.com" target="_blank" rel="noopener">principlestash.com</a>
+          <a class="foot-ps" href="https://principlestash.com" target="_blank" rel="noopener"><img class="tool-fav" src={`${base}/favicons/principlestash.png`} alt="" width="14" height="14" loading="lazy" onerror="this.remove()" />principlestash.com</a>
           <a href={repo} rel="noopener">GitHub</a>
           <a href="#top">Back to top ↑</a>
         </span>
@@ -440,9 +440,10 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
     /* footer */
     .foot { border-block-start: 1px solid var(--border); background: var(--surface); }
     .foot-in { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; padding-block: 2rem; color: var(--muted); }
-    .foot-links { display: flex; gap: 1.2rem; flex-wrap: wrap; }
+    .foot-links { display: flex; gap: 1.2rem; flex-wrap: wrap; align-items: center; }
     .foot-links a { color: var(--muted); text-decoration: none; }
     .foot-links a:hover { color: var(--text); }
+    .foot-ps { display: inline-flex; align-items: center; }
     .foot-brand { display: inline-flex; align-items: baseline; gap: 0.5ch; flex-wrap: wrap; }
     .foot-ver { color: var(--muted); font-size: 0.82rem; font-family: var(--mono); opacity: 0.85; }
     .foot-ver a { color: inherit; text-decoration: none; }
