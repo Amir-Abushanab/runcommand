@@ -1,6 +1,6 @@
 // Guard: a generated config block must never change without BLOCK_V changing too.
 //
-// This is the failure a package release cannot fix. `npm i -g runcommand@latest`
+// This is the failure a package release cannot fix. `npm i -g @amabush/runcommand@latest`
 // updates the binary; it never touches the lines already written into someone's
 // ~/.config/starship.toml. Only `runcommand init` rewrites those, and it only
 // offers to when the block's marker records an older BLOCK_V. So editing a block

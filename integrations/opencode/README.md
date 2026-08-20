@@ -55,8 +55,9 @@ repo, and otherwise plain `runcommand` on your `PATH`. So a clone works with no
 setup, and a standalone install works as long as the CLI is installed too.
 `RUNCOMMAND_CMD` overrides both.
 
-This package is publishable (`runcommand-opencode`) but **not yet published** — for
-now, install from a checkout.
+Published as [`@amabush/runcommand-opencode`](https://www.npmjs.com/package/@amabush/runcommand-opencode),
+so `"plugin": ["@amabush/runcommand-opencode"]` works without a checkout — as long as the
+CLI (`@amabush/runcommand`) is installed too.
 
 ## Config (env)
 

@@ -19,7 +19,7 @@ entire cost of discarding one is a single detection call. The separate ports cac
 deliberately *not* versioned; it self-heals inside its 2.5 s TTL.
 
 **2. The generated config blocks — versioned, and migrated.** This is the one that actually
-needs care, because **`npm i -g runcommand@latest` cannot fix it**. `init` writes real lines
+needs care, because **`npm i -g @amabush/runcommand@latest` cannot fix it**. `init` writes real lines
 into files the user owns — `~/.config/starship.toml`, `~/.tmux.conf` — and a package upgrade
 never revisits them. So each block is fenced with a version-stamped marker:
 

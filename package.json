@@ -1,5 +1,5 @@
 {
-  "name": "runcommand",
+  "name": "@amabush/runcommand",
   "version": "0.2.0",
   "description": "Show each project's run/dev command in the Claude Code status bar. LLM-detected once, cached per-project.",
   "author": "Amir Abushanab",
@@ -11,6 +11,9 @@
   "homepage": "https://amir-abushanab.github.io/runcommand/",
   "bugs": {
     "url": "https://github.com/Amir-Abushanab/runcommand/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "type": "module",
   "bin": {

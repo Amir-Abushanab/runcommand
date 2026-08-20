@@ -12,7 +12,7 @@
  *
  * Register it in `~/.config/opencode/tui.json` — either the package, if installed
  * from npm, or this directory from a checkout:
- *   { "plugin": ["runcommand-opencode"] }
+ *   { "plugin": ["@amabush/runcommand-opencode"] }
  *   { "plugin": ["/absolute/path/to/runcommand/integrations/opencode"] }
  */
 import type { TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui";

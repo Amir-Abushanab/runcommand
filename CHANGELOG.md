@@ -1,4 +1,4 @@
-# runcommand
+# @amabush/runcommand
 
 ## 0.2.0
 

@@ -1,4 +1,4 @@
-# runcommand-opencode
+# @amabush/runcommand-opencode
 
 ## 0.2.0
 

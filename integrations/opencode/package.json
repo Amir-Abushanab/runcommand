@@ -1,5 +1,5 @@
 {
-  "name": "runcommand-opencode",
+  "name": "@amabush/runcommand-opencode",
   "version": "0.2.0",
   "description": "OpenCode TUI plugin: shows the project's run command + clickable live localhost ports (powered by runcommand).",
   "author": "Amir Abushanab",
@@ -12,6 +12,9 @@
   "homepage": "https://github.com/Amir-Abushanab/runcommand/tree/main/integrations/opencode",
   "bugs": {
     "url": "https://github.com/Amir-Abushanab/runcommand/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "type": "module",
   "exports": {

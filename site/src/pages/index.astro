@@ -89,7 +89,7 @@ const terminals = [
   { slug: "apple", name: "Apple Terminal", color: "var(--text)", osc8: false },
 ];
 
-const installNote = `<code>runcommand init</code> finds supported tools, updates their config, and backs up changed files. It needs Node and one supported AI CLI for detection. <a href="${repo}" rel="noopener">Read the setup guide &rarr;</a>`;
+const installNote = `<code>init</code> finds supported tools, updates their config, and backs up changed files. It needs Node and one supported AI CLI for detection. <a href="${repo}" rel="noopener">Read the setup guide &rarr;</a>`;
 
 const surfaceTools = [
   {
@@ -170,7 +170,7 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
             </a>
           </div>
           <div class="install">
-            <code id="install-cmd">runcommand init</code>
+            <code id="install-cmd">npm i -g @amabush/runcommand &amp;&amp; runcommand init</code>
             <button class="copy" type="button" data-copy-target="install-cmd" aria-label="Copy command">Copy</button>
           </div>
           <p class="install-note" set:html={installNote}></p>

@@ -30,17 +30,16 @@ whatever already draws your status line.
 
 ## Install
 
-One command. Clone it somewhere permanent, then let `init` do the rest:
+One command:
 
 ```sh
-git clone https://github.com/Amir-Abushanab/runcommand.git ~/.runcommand && node ~/.runcommand/bin/runcommand.mjs init
+npm i -g @amabush/runcommand && runcommand init
 ```
 
-`init` offers to put `runcommand` on your `PATH` (a symlink into `~/.local/bin`), then
-detects the tools you actually have — Claude Code, Qwen Code, starship, tmux — and wires
-each one, backing up every file it touches and preserving any status line you already run.
-`--dry-run` previews the lot without writing, `--yes` skips the prompts, and `runcommand
-uninstall` puts everything back.
+`init` detects the tools you actually have — Claude Code, Qwen Code, starship, tmux — and
+wires each one, backing up every file it touches and preserving any status line you already
+run. `--dry-run` previews the lot without writing, `--yes` skips the prompts, and
+`runcommand uninstall` puts everything back.
 
 Needs **Node ≥ 18** (already there if you run Claude Code) and an **AI CLI on your
 `PATH`** for detection — [`claude`](https://claude.com/claude-code) by default; OpenCode,
@@ -48,12 +47,18 @@ Gemini CLI, Qwen Code or Codex work too. Developed on macOS/Linux; [Windows](#wi
 best-effort.
 
 <details>
-<summary>Wiring it up by hand instead</summary>
+<summary>From a clone instead</summary>
 
-`npm i -g .` from the clone installs it as a package; or skip installing altogether and
-call `node bin/runcommand.mjs <command>` everywhere. Either way, keep the clone somewhere
-permanent — the lines written into your config point back at it. Then wire whichever tools
-you want: every section below is the manual equivalent of what `init` writes.
+```sh
+git clone https://github.com/Amir-Abushanab/runcommand.git ~/.runcommand && node ~/.runcommand/bin/runcommand.mjs init
+```
+
+Run from a checkout, `init` offers to put `runcommand` on your `PATH` (a symlink into
+`~/.local/bin`) and otherwise writes the absolute `node …/runcommand.mjs` invocation into
+your configs — so keep the clone somewhere permanent. You can also skip `init` entirely
+and wire things up by hand: every section below is the manual equivalent of what it
+writes. (Don't install with `npx` — it runs from a cache directory that disappears, so
+`init` refuses.)
 </details>
 
 ## Claude Code

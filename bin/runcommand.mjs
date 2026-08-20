@@ -942,7 +942,7 @@ function unwireJson(h) {
 const CONFIG_HOME = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
 // Generated blocks carry a schema version in their opening marker, so a later
 // release can recognise one it wrote under older rules and offer to refresh it.
-// This is the ONLY migration path config has: `npm i -g runcommand@latest` updates
+// This is the ONLY migration path config has: `npm i -g @amabush/runcommand@latest` updates
 // the binary, never the lines already sitting in someone's starship.toml.
 //   v1 — original, unversioned marker
 //   v2 — starship: format = "($output )", the conditional trailing separator
@@ -1086,7 +1086,7 @@ async function runInit() {
     say(``);
     say(`Install it for real first, then wire it up:`);
     say(``);
-    say(`  npm i -g runcommand && runcommand init`);
+    say(`  npm i -g @amabush/runcommand && runcommand init`);
     return;
   }
   const auto = [...JSON_HARNESSES, ...BLOCK_HARNESSES];
