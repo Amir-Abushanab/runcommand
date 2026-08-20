@@ -856,6 +856,11 @@ async function readStdin() {
 
 // ---------- init / uninstall (wire runcommand into your tools) ----------
 
+// npx runs us out of a cache directory that sits on PATH for exactly one invocation.
+// Both invocation forms we could write from there — a bare `runcommand`, or this
+// absolute path — stop resolving the moment npx exits, so `init` would leave behind a
+// status line that silently renders nothing. Detect it and ask for a durable install.
+function isEphemeralInstall(p = SELF) { return /[\\/]_npx[\\/]/.test(p); }
 // How a config file should call runcommand: a bare `runcommand` if it's on PATH,
 // else this script through node.
 function selfInvocation() {
@@ -1074,6 +1079,16 @@ async function confirm(rl, q) {
 async function runInit() {
   const dry = ARGS.dryRun;
   const say = (s = "") => process.stdout.write(s + "\n");
+  if (isEphemeralInstall()) {
+    say(`runcommand init: this is running through npx, out of a cache directory that`);
+    say(`goes away when the command exits — so every line init wrote would point at a`);
+    say(`runcommand that no longer exists, and your status line would just go blank.`);
+    say(``);
+    say(`Install it for real first, then wire it up:`);
+    say(``);
+    say(`  npm i -g runcommand && runcommand init`);
+    return;
+  }
   const auto = [...JSON_HARNESSES, ...BLOCK_HARNESSES];
   const interactive = !!process.stdin.isTTY && !ARGS.yes;
   if (!interactive && !ARGS.yes && !dry) {
@@ -1323,4 +1338,4 @@ const invokedAsCli = (() => {
 if (invokedAsCli) main();
 
 // Pure helpers, exported for tests. Nothing here touches the filesystem or spawns.
-export { parseNetstat, cmdlineInProject, normalizeCommands, formatCommandsCLI, keepPort, blockVersionIn, blockFingerprints, BLOCK_V, CACHE_V };
+export { parseNetstat, cmdlineInProject, normalizeCommands, formatCommandsCLI, keepPort, blockVersionIn, blockFingerprints, isEphemeralInstall, BLOCK_V, CACHE_V };

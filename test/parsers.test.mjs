@@ -10,6 +10,7 @@ import {
   formatCommandsCLI,
   keepPort,
   blockVersionIn,
+  isEphemeralInstall,
   BLOCK_V,
   CACHE_V,
 } from "../bin/runcommand.mjs";
@@ -138,4 +139,15 @@ test("blockVersionIn: null when nothing runcommand-authored is present", () => {
 test("BLOCK_V is ahead of v1, so existing installs are offered a refresh", () => {
   assert.ok(BLOCK_V > 1);
   assert.equal(typeof CACHE_V, "number");
+});
+
+// npx puts its cache dir on PATH for one invocation, so `runcommand` resolves while
+// init runs and never again. init has to refuse rather than wire a name that dies.
+test("isEphemeralInstall: spots an npx cache path, on either separator", () => {
+  assert.equal(isEphemeralInstall("/Users/x/.npm/_npx/d7ef9857/node_modules/runcommand/bin/runcommand.mjs"), true);
+  assert.equal(isEphemeralInstall("C:\\Users\\x\\AppData\\Local\\npm-cache\\_npx\\a1b2\\node_modules\\runcommand\\bin\\runcommand.mjs"), true);
+  assert.equal(isEphemeralInstall("/Users/x/.local/bin/runcommand"), false);
+  assert.equal(isEphemeralInstall("/opt/homebrew/lib/node_modules/runcommand/bin/runcommand.mjs"), false);
+  // A directory merely named like the cache marker isn't one.
+  assert.equal(isEphemeralInstall("/Users/x/code/_npxtools/bin/runcommand.mjs"), false);
 });

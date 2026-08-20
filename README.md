@@ -30,21 +30,31 @@ whatever already draws your status line.
 
 ## Install
 
+One command. Clone it somewhere permanent, then let `init` do the rest:
+
+```sh
+git clone https://github.com/Amir-Abushanab/runcommand.git ~/.runcommand && node ~/.runcommand/bin/runcommand.mjs init
+```
+
+`init` offers to put `runcommand` on your `PATH` (a symlink into `~/.local/bin`), then
+detects the tools you actually have — Claude Code, Qwen Code, starship, tmux — and wires
+each one, backing up every file it touches and preserving any status line you already run.
+`--dry-run` previews the lot without writing, `--yes` skips the prompts, and `runcommand
+uninstall` puts everything back.
+
 Needs **Node ≥ 18** (already there if you run Claude Code) and an **AI CLI on your
 `PATH`** for detection — [`claude`](https://claude.com/claude-code) by default; OpenCode,
 Gemini CLI, Qwen Code or Codex work too. Developed on macOS/Linux; [Windows](#windows) is
 best-effort.
 
-```sh
-ln -sfn "$PWD/bin/runcommand.mjs" ~/.local/bin/runcommand   # from the repo root
-```
+<details>
+<summary>Wiring it up by hand instead</summary>
 
-Or `npm i -g .` — or skip installing and run `node bin/runcommand.mjs <command>`.
-
-Then **`runcommand init`** wires up the tools you actually have (Claude Code, Qwen Code,
-starship, tmux), backs up every file it touches, and preserves any status line you already
-run. `--dry-run` previews it, `runcommand uninstall` undoes it. Everything below is the
-manual equivalent.
+`npm i -g .` from the clone installs it as a package; or skip installing altogether and
+call `node bin/runcommand.mjs <command>` everywhere. Either way, keep the clone somewhere
+permanent — the lines written into your config point back at it. Then wire whichever tools
+you want: every section below is the manual equivalent of what `init` writes.
+</details>
 
 ## Claude Code
 
