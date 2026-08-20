@@ -29,7 +29,7 @@ jobs:
       # can release it, but nothing here exercises it, and a full install drags in
       # its ~130-package dev/peer tree plus a native build that would have to
       # compile on the Windows runner too. Drop the filter if the plugin gets tests.
-      - run: pnpm install --frozen-lockfile --filter runcommand
+      - run: pnpm install --frozen-lockfile --filter @amabush/runcommand
       - run: pnpm test
 
       # Smoke test the real CLI on each OS. Detection is deliberately not exercised
