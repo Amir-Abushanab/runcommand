@@ -897,7 +897,9 @@ const JSON_HARNESSES = [
     key: "qwen", label: "Qwen Code",
     file: path.join(os.homedir(), ".qwen", "settings.json"),
     installed: () => exists(path.join(os.homedir(), ".qwen")) || !!findBin("qwen"),
-    envPrefix: "RUNCOMMAND_PORT_STYLE=url ", // Qwen strips OSC 8; url keeps ports clickable
+    // Qwen is reported to strip OSC 8 (not independently verified here); url keeps the
+    // ports clickable either way, since terminals auto-link visible URL text.
+    envPrefix: "RUNCOMMAND_PORT_STYLE=url ",
     get: (j) => j.ui && j.ui.statusLine && j.ui.statusLine.command,
     set: (j, cmd) => { j.ui = j.ui || {}; j.ui.statusLine = Object.assign({}, j.ui.statusLine, { type: "command", command: cmd }); },
     del: (j) => { if (j.ui) delete j.ui.statusLine; },

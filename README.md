@@ -190,12 +190,21 @@ other repos' servers don't leak in. Ephemeral ports (`≥ 49152`) and debuggers 
 filtered, and the scan is cached for 2.5s so it stays cheap on the hot path.
 `RUNCOMMAND_NO_PORTS=1` hides them entirely.
 
-Two link styles, set with `RUNCOMMAND_PORT_STYLE`. **`compact`** is the default
-everywhere: a short `:PORT` as an OSC 8 hyperlink — ⌘-click in Ghostty, iTerm2, WezTerm,
-kitty, VS Code, and Claude Code's TUI passes OSC 8 straight through. **`url`** prints the
-full `http://localhost:PORT` as visible text, which terminals auto-link even where OSC 8
-is stripped; that's for surfaces known to strip it, and `init` sets it explicitly for the
-one that does (Qwen Code).
+**Clickability, per surface.** Two styles: **`compact`** (`:3000`, a short OSC 8
+hyperlink) is the default, and **`url`** (`http://localhost:3000` as visible text, which
+terminals auto-link on their own) is for surfaces that strip OSC 8. Which is which isn't a
+guess:
+
+| Surface | OSC 8 | Style | How we know |
+| --- | --- | --- | --- |
+| Claude Code status line | passes through | `compact` | [documented](https://code.claude.com/docs/en/statusline#clickable-links) — OSC 8 links are a supported status-line feature |
+| starship / Oh My Posh | passes through | `compact` | by construction: your terminal draws the prompt, so only its support matters |
+| **tmux** status bar | **stripped** | **`url`** | measured — tmux stores the escape verbatim, then emits none of it to the client |
+| Qwen Code | reported stripped | `url` | not independently verified; `init` sets `RUNCOMMAND_PORT_STYLE=url` for it anyway |
+| Zellij (zjstatus) | unverified | `url` | assume tmux-like until someone measures it |
+| OpenCode footer | n/a | n/a | the plugin reads `--json` and builds its own links via OpenTUI |
+
+`RUNCOMMAND_PORT_STYLE` overrides the default on any surface.
 
 ## Other surfaces
 
@@ -268,7 +277,9 @@ set -ga status-right " #(runcommand prompt -C '#{pane_current_path}')"
 ```
 
 `runcommand prompt` prints the plain command, and nothing in non-project dirs. Append live
-ports with `#(runcommand ports -C '#{pane_current_path}')`.
+ports with `#(runcommand ports --urls -C '#{pane_current_path}')` — `--urls` matters here,
+because tmux strips OSC 8 hyperlinks out of the status line, so the compact `:3000` form
+would render as dead text.
 
 **Terminal title** — a universal fallback, from a zsh `precmd()` or bash `PROMPT_COMMAND`
 (some TUIs overwrite it):
