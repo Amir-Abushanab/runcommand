@@ -27,10 +27,24 @@
  */
 import type { TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui";
 import type { JSX } from "@opentui/solid";
-import { createRoot, createSignal, onCleanup } from "solid-js";
+import { createRoot, createSignal, onCleanup, Show } from "solid-js";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+/**
+ * Opt-in tracing: RUNCOMMAND_OPENCODE_DEBUG=/tmp/rc.log opencode
+ *
+ * This plugin fails silently by design — a bad load, a dead Solid build or an
+ * untracked read all render as "no footer, no error". Every one of those cost real
+ * hours to tell apart, so the probes stay, switched off by default.
+ */
+const DBG = process.env["RUNCOMMAND_OPENCODE_DEBUG"] ?? "";
+function dbg(msg: string): void {
+  if (DBG === "") return;
+  try { require("node:fs").appendFileSync(DBG, `${new Date().toISOString()} ${msg}\n`); } catch {}
+}
+dbg("module evaluated");
 
 /** How often the line re-reads state. A spawn behind a disk cache — cheap. */
 const REFRESH_MS = Number(process.env["RUNCOMMAND_OPENCODE_REFRESH_MS"] ?? "5000");
@@ -133,6 +147,7 @@ function initialize(api: TuiPluginApi, disposeRoot: () => void): void {
   const refresh = (): void => {
     void (async () => {
       const next = await fetchRun(directory());
+      dbg(`fetchRun(${directory()}) -> ${next === null ? "null" : JSON.stringify(next).slice(0, 90)}`);
       if (!disposed) setData(next);
     })();
   };
@@ -145,15 +160,34 @@ function initialize(api: TuiPluginApi, disposeRoot: () => void): void {
     disposeRoot();
   });
 
+  // Derived: the data worth showing, or false. Read inside <Show> so it stays tracked.
+  const shown = (): RunData | false => {
+    const d = data();
+    if (d === null) return false;
+    if (d.commands.length === 0 && d.ports.length === 0 && !d.detecting) return false;
+    return d;
+  };
+
+  dbg("registering slot");
   api.slots.register({
     // Late order: the host's own model/dir readout keeps its place; we sit after it.
     order: 90,
     slots: {
+      // The host calls this ONCE, to build the view. Reading data() in the function
+      // body would therefore capture a single value — null, at startup — and nothing
+      // would ever re-read it, however reactive the signal is. The read has to happen
+      // inside the returned JSX, where Solid tracks it as a computation and swaps the
+      // content in place. <Show> renders nothing while there is nothing to show.
       app_bottom() {
-        const d = data();
-        if (d === null) return null;
-        if (d.commands.length === 0 && d.ports.length === 0 && !d.detecting) return null;
-        return runRow(d);
+        dbg("app_bottom() called (building reactive view)");
+        return (
+          <Show when={shown()} keyed>
+            {(d: RunData) => {
+              dbg(`rendering row: ${JSON.stringify(d).slice(0, 80)}`);
+              return runRow(d);
+            }}
+          </Show>
+        );
       },
     },
   });
@@ -162,6 +196,7 @@ function initialize(api: TuiPluginApi, disposeRoot: () => void): void {
 const plugin: TuiPluginModule = {
   id: "runcommand",
   tui: (api) => {
+    dbg("tui() called");
     createRoot((disposeRoot) => {
       initialize(api, disposeRoot);
     });

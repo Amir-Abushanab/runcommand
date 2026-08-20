@@ -2,18 +2,24 @@
 "@amabush/runcommand-opencode": minor
 ---
 
-Ship a bundled build, which is what finally makes the footer render.
+Build the plugin so it actually renders. The footer had always been empty: the plugin
+loaded, registered its slot, drew once with no data, and never updated again — with
+nothing on screen or in any log to say why.
 
-The plugin loaded, registered its slot and drew exactly once — with no data — then never
-updated. The cause was dependency resolution, not the plugin's logic: `solid-js` exports
-`dist/server.js` under the `node` condition, and that server-rendering build never runs
-effects. So the signal that `fetchRun()` sets could never repaint the slot. Nothing
-errored, which is why it looked like the plugin simply wasn't loading.
+Two things were needed, and either one missing produced that same silent nothing.
 
-`tui.tsx` is now bundled with `bun build --conditions=browser`, which pins solid-js to its
-client build and inlines it (verified reactive: the same signal that never fired under
-`server.js` re-renders under the client build). `@opentui/core` stays external — the host
-owns the renderer — and is now declared as a peer dependency so it resolves.
+**Solid's reactivity is a compile-time transform.** It rewrites `when={shown()}` into
+`get when() { … }` so the prop is re-read when the signal changes; bun's built-in JSX
+transform evaluates props eagerly, freezing the view at its startup values. `@opentui/solid`
+ships that transform as a bun plugin, which `bun build` only accepts through its JS API —
+hence `build.mjs`.
 
-`exports` points at `dist/tui.js`; `prepublishOnly` builds it, and the release workflow
-installs bun so publishing produces the bundle.
+**The host owns the runtime.** `solid-js`, `@opentui/solid` and `@opentui/core` are all
+external. Bundling Solid gives the plugin its own reactive graph and its own renderer, so
+the elements it builds aren't the ones OpenCode can paint. Sharing the host's instances is
+what makes the slot mount — and keeps the bundle ~7 KB rather than ~106 KB.
+
+Also: the source moved to `src/`, so a path registration can't silently resolve to the
+unbundled `tui.tsx`; `exports` points at `dist/tui.js`; `prepublishOnly` builds it; and the
+release workflow installs bun so a publish can't ship an unbuilt package. Tracing is
+available with `RUNCOMMAND_OPENCODE_DEBUG=/tmp/rc.log`.

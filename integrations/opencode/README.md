@@ -42,13 +42,34 @@ bun install            # in the plugin directory
 bun run build          # bundles tui.tsx -> dist/tui.js
 ```
 
+**A filesystem path must point at `dist/tui.js`, not the directory.** `exports` only
+applies to package specifiers — a path gets plain file resolution, so
+`.../integrations/opencode/tui` would load `tui.tsx` **source**, unbundled, with the dead
+server build of Solid. That's why the source now lives in `src/`: the shorter path fails
+loudly instead of silently loading the wrong file. Installed from npm, the package form
+`@amabush/runcommand-opencode/tui` goes through `exports` and lands on the bundle.
+
 **The build is required, not optional.** `dist/` is what `exports` points at, and it
 isn't committed. It also isn't just a compile step: the bundle is produced with
-`--conditions=browser`, which pins `solid-js` to its **client** build. Loaded from source,
-`solid-js` resolves through the `node` condition to `dist/server.js` — Solid's
-server-rendering build, whose effects never run. The plugin then loads, registers its
-slot, renders once with no data, and never updates again: an empty footer with no error
-anywhere. `@opentui/core` stays external, since the host owns the renderer.
+`--conditions=browser`, which pins the build to the **client** flavor of the bits it
+bundles. Loaded from source, `solid-js` resolves through the `node` condition to
+`dist/server.js` — Solid's server-rendering build, whose effects never run. The plugin
+then loads, registers its slot, renders once with no data, and never updates again: an
+empty footer with no error anywhere.
+
+`solid-js`, `@opentui/solid`, `@opentui/core` and `@opencode-ai/plugin` are all
+**external** — the host provides them, and sharing one copy is what makes the plugin
+work at all. Two traps hide here:
+
+- A second `solid-js` is a second reactivity graph. The host mounts slot content on its
+  own initial pass and skips an empty contribution; it can only re-mount later if the
+  *same* graph sees the signal change. Bundling our own copy would make the update fire
+  in an isolated graph the host's tree never reads — an empty footer even though the
+  bundle proves itself "reactive".
+- A second `@opentui/solid` (or `@opentui/core`) is a second renderer.
+
+When installed from npm these all come in as peer dependencies. From a checkout, the
+host's copy is picked up via its own `node_modules` resolution at load time.
 
 Then register it in `~/.config/opencode/tui.json` (append — don't remove other
 plugins):
@@ -56,7 +77,7 @@ plugins):
 ```json
 {
   "$schema": "https://opencode.ai/tui.json",
-  "plugin": ["/absolute/path/to/runcommand/integrations/opencode/tui"]
+  "plugin": ["/absolute/path/to/runcommand/integrations/opencode/dist/tui.js"]
 }
 ```
 

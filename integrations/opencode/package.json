@@ -32,7 +32,7 @@
     "@opencode-ai/plugin": "^1.18.10"
   },
   "scripts": {
-    "build": "bun build tui.tsx --target=bun --conditions=browser --external @opentui/core --external @opencode-ai/plugin --outfile=dist/tui.js",
+    "build": "bun run build.mjs",
     "prepublishOnly": "bun run build"
   }
 }
