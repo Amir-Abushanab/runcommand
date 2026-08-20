@@ -190,11 +190,12 @@ other repos' servers don't leak in. Ephemeral ports (`≥ 49152`) and debuggers 
 filtered, and the scan is cached for 2.5s so it stays cheap on the hot path.
 `RUNCOMMAND_NO_PORTS=1` hides them entirely.
 
-Two link styles, set with `RUNCOMMAND_PORT_STYLE`: **`url`** (the status-line default)
-prints a full `http://localhost:PORT`, which terminals auto-link even without OSC 8
-support; **`compact`** (the prompt default) prints a short `:PORT` as an OSC 8 hyperlink —
-⌘-click in Ghostty, iTerm2, WezTerm, kitty, VS Code, and Claude Code's TUI passes OSC 8
-through, so it works there too.
+Two link styles, set with `RUNCOMMAND_PORT_STYLE`. **`compact`** is the default
+everywhere: a short `:PORT` as an OSC 8 hyperlink — ⌘-click in Ghostty, iTerm2, WezTerm,
+kitty, VS Code, and Claude Code's TUI passes OSC 8 straight through. **`url`** prints the
+full `http://localhost:PORT` as visible text, which terminals auto-link even where OSC 8
+is stripped; that's for surfaces known to strip it, and `init` sets it explicitly for the
+one that does (Qwen Code).
 
 ## Other surfaces
 
@@ -341,7 +342,7 @@ exact pin use an [override](#overrides-instant-no-model-call).
 | `RUNCOMMAND_LABEL` | – | Text before the command, e.g. `run: ` |
 | `RUNCOMMAND_COLORS` | `36,33,35,34,32` | Per-service colors (ANSI codes), cycled by position; one code = one color |
 | `RUNCOMMAND_TTL_MS` | `0` (off) | Re-detect after this long even if the manifest is unchanged |
-| `RUNCOMMAND_PORT_STYLE` | `url` (statusline) / `compact` (prompt) | `url` = full clickable `http://localhost:PORT`; `compact` = `:PORT` OSC 8 link |
+| `RUNCOMMAND_PORT_STYLE` | `compact` | `compact` = `:PORT` as an OSC 8 link; `url` = full visible `http://localhost:PORT`, for surfaces that strip OSC 8 |
 | `RUNCOMMAND_NO_PORTS` | – | Hide live ports in the status line |
 | `RUNCOMMAND_PORTS_TTL_MS` | `2500` | How long a port scan is cached (ms) |
 | `RUNCOMMAND_IGNORE_PORTS` | `9229,9230` | Ports to never show (e.g. debuggers) |

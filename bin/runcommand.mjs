@@ -705,11 +705,12 @@ function getPorts(root, { all = false } = {}) {
 }
 
 // Render the live ports, clickable. Two styles (RUNCOMMAND_PORT_STYLE overrides):
-//   "url"     — full "http://localhost:PORT" visible text; terminals auto-linkify
-//               it (⌘-click in Ghostty) even where OSC 8 hyperlinks get stripped
-//               (e.g. inside a TUI status bar). Used by the status line.
-//   "compact" — short ":PORT" as a real OSC 8 hyperlink; clickable in a shell
-//               prompt. Used by `promptline`.
+//   "compact" — short ":PORT" as a real OSC 8 hyperlink. The default everywhere:
+//               Claude Code's TUI passes OSC 8 through, and a status bar is too
+//               narrow to spend "http://localhost:" on every port.
+//   "url"     — full "http://localhost:PORT" as visible text, which terminals
+//               auto-linkify even where OSC 8 gets stripped. For surfaces known to
+//               strip it — Qwen Code, which `init` wires with this set explicitly.
 function renderPorts(ports, { style = "compact" } = {}) {
   if (!ports || !ports.length) return "";
   const s = process.env.RUNCOMMAND_PORT_STYLE || style;
@@ -773,7 +774,7 @@ function statusline(rawStdin) {
 
   const { commands, detecting } = currentCommands(root);
   const runPart = detecting ? renderRunLine(null, "detecting") : renderRunLine(commands, "ok");
-  const portPart = process.env.RUNCOMMAND_NO_PORTS ? "" : renderPorts(getPorts(root), { style: "url" });
+  const portPart = process.env.RUNCOMMAND_NO_PORTS ? "" : renderPorts(getPorts(root), { style: "compact" });
 
   // Run command + live ports share one line: "▶ pnpm dev   ◉ :3000".
   let line = "";
