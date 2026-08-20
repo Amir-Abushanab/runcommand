@@ -1046,7 +1046,7 @@ function unwireBlock(h) {
 function manualNotes(say) {
   if (!!findBin("opencode") || exists(path.join(CONFIG_HOME, "opencode"))) {
     say(`\n• OpenCode detected — it renders via a plugin, not a status-line command.`);
-    say(`  See the README "Other agents and prompts" for the drop-in plugin;`);
+    say(`  See the README "Other surfaces" for the drop-in plugin;`);
     say(`  this installer doesn't manage plugins.`);
   }
   if (!!findBin("codex") || exists(path.join(os.homedir(), ".codex"))) {
@@ -1062,7 +1062,7 @@ function manualNotes(say) {
     say(`      command_runcommand_command "bash -lc '${selfInvocation()} prompt'"`);
     say(`      command_runcommand_format "{stdout}"  command_runcommand_interval "5"`);
     say(`    }`);
-    say(`  Full steps: README "Terminal multiplexers & ambient surfaces".`);
+    say(`  Full steps: README "Ambient surfaces".`);
   }
 }
 async function confirm(rl, q) {

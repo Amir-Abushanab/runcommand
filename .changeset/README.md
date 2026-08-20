@@ -9,8 +9,13 @@ Two project-specific rules:
 - **A changed generated config block is at least a `minor`, and its note must say
   "re-run `runcommand init`".** Upgrading the package never rewrites the lines
   already sitting in someone's `starship.toml`; only `init` does. See `BLOCK_V` in
-  `bin/runcommand.mjs`, and the Versioning section of the README.
+  `bin/runcommand.mjs`, and the Versioning section of `CONTRIBUTING.md`.
 - **Detection-cache shape changes (`CACHE_V`) don't need a note.** A version the
   build doesn't recognise is treated as a cache miss and re-detected silently.
+
+Two packages are released from here: `runcommand` (the CLI, `bin/`) and
+`runcommand-opencode` (the TUI plugin, `integrations/opencode/`). They version
+independently — a plugin fix shouldn't bump the CLI. `site/` is not a workspace
+member and is never released.
 
 Full docs: https://github.com/changesets/changesets

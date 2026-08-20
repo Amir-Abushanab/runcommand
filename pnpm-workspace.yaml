@@ -1,0 +1,12 @@
+# The workspace exists so changesets can see the OpenCode plugin as a releasable
+# package alongside the CLI. site/ is deliberately NOT a member — it keeps its own
+# lockfile and toolchain, as it always has.
+packages:
+  - "."
+  - "integrations/*"
+
+# Pulled in transitively by the plugin's dev/peer tree. Optional native accelerator
+# for msgpackr; pnpm 11 blocks build scripts by default and errors out rather than
+# skipping, so it has to be named to let a full install finish.
+allowBuilds:
+  msgpackr-extract: true

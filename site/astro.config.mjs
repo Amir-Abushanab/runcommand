@@ -5,4 +5,9 @@ import { defineConfig } from "astro/config";
 export default defineConfig({
   site: "https://amir-abushanab.github.io",
   base: "/runcommand",
+  // Let the OS select a free development port. `astro dev --port <number>`
+  // still overrides this when a stable port is needed.
+  server: {
+    port: 0,
+  },
 });

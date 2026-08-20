@@ -19,49 +19,34 @@ it. **runcommand** works it out and keeps it in front of you:
   <img src="assets/shot-statusbar.png" width="720" alt="runcommand in the Claude Code status bar: ▶ pnpm dev with clickable ports :3000 :5173, beneath the existing status line" />
 </p>
 
-A quick headless LLM call (Claude Code's `claude -p` by default — or [any agent you
-configure](#detection-agent)) works out the command from your `package.json` scripts,
-lockfile and manifests, **caches it per project**, and only re-asks when a manifest
-changes — so the render never waits on the model (cache hit ~50ms; a miss shows
-`▶ finding run command…` and detects in the background).
-
-It's a tiny, **dependency-free** Node CLI (built-ins only) that speaks Claude
-Code's status-line contract — so the same answer drops into **starship**,
-**OpenCode**, **Qwen Code**, and more, and coexists with whatever already draws
-your status line (see [Coexisting](#coexisting-with-another-status-line)).
-
-> 🌐 **Showcase:** the [`site/`](site/) directory is an Astro page (run it locally
-> with `pnpm site`) that deploys to `https://amir-abushanab.github.io/runcommand/`.
-
-**Jump to:** [Install](#install) · [Claude Code](#wire-it-into-claude-code) · [Detection agent](#detection-agent) · [Live ports](#live-localhost-ports) · [Shell prompt](#shell-prompt-starship) · [Other surfaces](#other-agents-and-prompts) · [tmux & ambient](#terminal-multiplexers--ambient-surfaces) · [Windows](#windows) · [Commands](#commands) · [Versioning](#versioning-and-compatibility) · [Config](#config-env-vars) · [How it works](#how-detection-works)
-
-## Requirements
-
-- **Node** ≥ 18 (already present if you run Claude Code)
-- An **AI CLI for detection** on your `PATH` — [`claude`](https://claude.com/claude-code) (Claude Code) by default; OpenCode, Gemini CLI, Qwen Code, or Codex work too (see [Detection agent](#detection-agent))
-- **macOS / Linux** are what this is developed and used on. **Windows** is
-  supported but **untested** — see [Windows](#windows) for what differs and what
-  to watch for.
+A headless LLM call (Claude Code's `claude -p` by default — or [any agent you
+configure](#detection-agent)) works the command out from your scripts, lockfile and
+manifests, **caches it per project**, and only re-asks when a manifest changes — so the
+render never waits on the model (cache hit ~50ms; a miss shows `▶ finding run command…`
+and detects in the background). It's a tiny, **dependency-free** Node CLI that speaks
+Claude Code's status-line contract, so the same answer drops into **starship**,
+**OpenCode**, **Qwen Code** and more, [alongside](#coexisting-with-another-status-line)
+whatever already draws your status line.
 
 ## Install
 
-Put `runcommand` on your `PATH` — simplest is a symlink into a dir that's already
-there (e.g. `~/.local/bin`):
+Needs **Node ≥ 18** (already there if you run Claude Code) and an **AI CLI on your
+`PATH`** for detection — [`claude`](https://claude.com/claude-code) by default; OpenCode,
+Gemini CLI, Qwen Code or Codex work too. Developed on macOS/Linux; [Windows](#windows) is
+best-effort.
 
 ```sh
 ln -sfn "$PWD/bin/runcommand.mjs" ~/.local/bin/runcommand   # from the repo root
 ```
 
-Or install it globally: `npm i -g .`. Prefer not to install at all? Every command
-below also works as `node bin/runcommand.mjs <command>`.
+Or `npm i -g .` — or skip installing and run `node bin/runcommand.mjs <command>`.
 
-**Fastest setup — `runcommand init`:** it detects the tools you actually have
-(Claude Code, Qwen Code, starship, tmux), wires each one for you, backs up every file
-it touches, and preserves any status line you already run. Preview with
-`runcommand init --dry-run`; undo everything with `runcommand uninstall`. The sections
-below are the manual equivalents.
+Then **`runcommand init`** wires up the tools you actually have (Claude Code, Qwen Code,
+starship, tmux), backs up every file it touches, and preserves any status line you already
+run. `--dry-run` previews it, `runcommand uninstall` undoes it. Everything below is the
+manual equivalent.
 
-## Wire it into Claude Code
+## Claude Code
 
 Add a `statusLine` to `~/.claude/settings.json`:
 
@@ -76,28 +61,33 @@ Add a `statusLine` to `~/.claude/settings.json`:
 ```
 
 If you didn't link it, use the full path instead:
+`"node /ABSOLUTE/PATH/TO/runcommand/bin/runcommand.mjs statusline"`. That's it — the first
+time you open each project the line reads `▶ finding run command…` for a few seconds, then
+flips to the real command and stays cached.
+
+### Coexisting with another status line
+
+Claude Code has exactly one `statusLine` slot, so to show **both** lines one has to render
+the other. Set `RUNCOMMAND_BASE` to any command that prints a status line and runcommand
+renders that first, then its own line beneath:
 
 ```json
-"command": "node /ABSOLUTE/PATH/TO/runcommand/bin/runcommand.mjs statusline"
+"command": "RUNCOMMAND_BASE='your existing status line command here' runcommand statusline"
 ```
 
-That's it. The first time you open each project the line reads
-`▶ finding run command…` for a few seconds, then flips to the real command and
-stays cached.
+The same stdin JSON is passed through, so anything that reads the standard contract just
+works, and the other tool's config is never touched. (The reverse works too: if your other
+tool can chain a child status line, point *it* at `runcommand statusline`.)
 
 ## Detection agent
 
-Detection is just a headless LLM call: runcommand hands your project's signals to an
-AI CLI and reads the command back. It tries agents in priority order and uses the
-**first that's installed and answers** — so uninstalling Claude Code silently falls
-through to whatever else is on the machine, and you never *need* any specific agent.
-(This is about *which AI figures out the command*, separate from [which tools display
-it](#other-agents-and-prompts).)
-
-The default order is `claude → opencode → gemini → qwen → codex → cursor → crush → amp → llm → sgpt`, then the agentic last-resorts `aider → goose → copilot`. Pin or reorder with
-`RUNCOMMAND_AGENT` — a single value forces one agent, a comma-separated list sets the
-priority chain (e.g. `RUNCOMMAND_AGENT=opencode,claude`). A broken agent (exits non-zero)
-also falls through to the next; a clean "no run command" answer does not:
+Detection is just a headless LLM call: runcommand hands an AI CLI your project's signals —
+`package.json` scripts, the package manager, the manifest list, a run hint from the README —
+and reads the command back. It tries agents in the table's order and uses the **first
+that's installed and answers** — so uninstalling Claude Code silently falls through to whatever
+else is on the machine, and you never *need* a specific agent. `RUNCOMMAND_AGENT` pins one
+(`opencode`) or sets the chain (`opencode,claude`). A broken agent falls through too; a
+clean "no run command" answer does not.
 
 | `RUNCOMMAND_AGENT` | Runs | Needs on `PATH` |
 | --- | --- | --- |
@@ -116,146 +106,91 @@ also falls through to the next; a clean "no run command" answer does not:
 | `copilot`† | `copilot -p "<prompt>"` | [Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli) |
 | `ollama`\* | `ollama run <model> "<prompt>"` | [Ollama](https://ollama.com) — local |
 
-<sub>† Agentic — `aider` edits files, `goose` runs tools, `copilot` is auth/confirmation-gated — so they sit **last** in the default chain (reached only when nothing cleaner is installed, i.e. it genuinely is your agent) with side-effect-minimizing flags. Prefer pinning a cleaner agent.</sub><br/>
-<sub>\* Ollama is **never** in the default chain (`ollama run` pulls a multi-GB model on first use). Opt in explicitly: `RUNCOMMAND_AGENT=ollama RUNCOMMAND_MODEL=llama3.2`. All of these are **detection-only** — of the terminal AI tools, only Claude Code and Qwen Code expose a config-based status line. For everything else, show the line via an **ambient surface** instead (see [Terminal multiplexers & ambient surfaces](#terminal-multiplexers--ambient-surfaces)).</sub>
+<sub>† Agentic — `aider` edits files, `goose` runs tools, `copilot` is auth-gated — so they sit **last** in the default chain (reached only when nothing cleaner is installed, i.e. it genuinely is your agent), with side-effect-minimizing flags.<br/>
+\* Never in the default chain, since `ollama run` pulls a multi-GB model on first use. Opt in with `RUNCOMMAND_AGENT=ollama RUNCOMMAND_MODEL=llama3.2`.</sub>
 
-```json
-{
-  "statusLine": {
-    "type": "command",
-    "command": "RUNCOMMAND_AGENT=opencode runcommand statusline"
-  }
-}
-```
+`RUNCOMMAND_MODEL` overrides the model (`haiku` for `claude`, the agent's own default
+otherwise). **`runcommand agents`** shows the resolved chain; `--probe` actually calls each
+one to confirm it responds (installed ≠ authenticated).
 
-`RUNCOMMAND_MODEL` overrides the model (passed as that agent's model flag); leave it
-unset for anything but `claude` to use the agent's own default. For claude it defaults
-to `haiku`.
-
-Run **`runcommand agents`** anytime to see the resolved chain — which agents are
-installed and which one wins. Add `--probe` to actually call each and confirm it
-responds (installed ≠ authenticated/working):
-
-```text
-Will try, in order:
-  1. claude    ~/.local/bin/claude       (model: haiku)
-  2. opencode  /opt/homebrew/bin/opencode (model: agent default)
-Not installed: gemini, qwen, codex
-```
-
-**Any other CLI?** Point `RUNCOMMAND_DETECT_CMD` at any command that takes a prompt and
-prints the model's answer to stdout. runcommand appends the prompt as the final argument
-(or substitutes it for a `{}` placeholder), so quoting is never your problem:
+**Any other CLI?** Point `RUNCOMMAND_DETECT_CMD` at anything that takes a prompt and prints
+the answer to stdout. The prompt is appended as the final argument, or substituted for a
+`{}` placeholder, so quoting is never your problem:
 
 ```sh
 RUNCOMMAND_DETECT_CMD="my-llm --fast"          # runs: my-llm --fast "<prompt>"
 RUNCOMMAND_DETECT_CMD="my-llm --prompt {} -q"  # runs: my-llm --prompt "<prompt>" -q
 ```
 
-The agent only has to emit the command in `<cmd></cmd>` tags (the prompt tells it how);
-caching, ports, and self-healing are unchanged. Use `RUNCOMMAND_AGENT_BIN` to point at a
-specific binary when it isn't on the status line's `PATH`.
-
-## Coexisting with another status line
-
-Claude Code has exactly one `statusLine` slot, so to show **both** your existing
-status line and the run-command line, one has to render the other. `runcommand`
-supports this generically via `RUNCOMMAND_BASE` — set it to any command that
-prints a status line, and `runcommand` renders that first, then its own line
-beneath:
-
-```json
-{
-  "statusLine": {
-    "type": "command",
-    "command": "RUNCOMMAND_BASE='your existing status line command here' runcommand statusline",
-    "padding": 0
-  }
-}
-```
-
-`runcommand` passes the same Claude Code JSON (on stdin) through to the base
-command, so anything that reads the standard `statusLine` contract just works. It
-never modifies the other tool's config.
-
-(The reverse also works: if your other tool can chain a child status line, point
-*it* at `runcommand statusline` and leave `RUNCOMMAND_BASE` unset.)
+It only has to emit the command in `<cmd></cmd>` tags (the prompt says how); caching, ports
+and self-healing are unchanged. `RUNCOMMAND_AGENT_BIN` points at a binary that isn't on the
+status line's `PATH`.
 
 ## Overrides (instant, no model call)
 
-To pin a project's command yourself — for anything the model gets wrong, or to
-skip the model entirely — do either:
+To pin a project's command yourself — for anything the model gets wrong, or to skip the
+model entirely — add a **`.claude-run`** file (or `.runcommand`), one command per line:
 
-- Add a **`.claude-run`** file. One command per line; add a `label:` prefix
-  (with a space) to name a service:
-  ```
-  make serve PORT=8080
-  ```
-  ```
-  web: pnpm dev:web
-  api: pnpm dev:api
-  ```
-- Or add a **`Run:`** line to the project's `CLAUDE.md` (only `CLAUDE.md`, and
-  only outside code fences — so documentation examples like this one don't count):
-  ```
-  Run: docker compose up --build
-  ```
+```
+make serve PORT=8080
+```
+
+…or a **`Run:`** line to the project's `CLAUDE.md` (only `CLAUDE.md`, and only outside code
+fences, so documentation examples like this one don't count):
+
+```
+Run: docker compose up --build
+```
 
 Overrides win over the cache and cost nothing.
 
-## Multiple run commands
+**Several services?** Prefix each with a `label:` and they render on one compact line, each
+in its own color (cycled from a colorblind-safe palette; tune with `RUNCOMMAND_COLORS`):
 
-Some repos run several services at once (a web app + an API, say). When that's the
-case they render on **one compact line**, each in its own color:
+```
+web: pnpm dev:web
+api: pnpm dev:api
+```
 
 <p align="center">
   <img src="assets/shot-monorepo.png" width="720" alt="multiple run commands on one line — web: pnpm dev:web · api: pnpm dev:api" />
 </p>
 
-Each service gets its own color (cycled from a colorblind-safe palette; tune it
-with `RUNCOMMAND_COLORS`). A single-service project stays a single unlabeled entry
-(`▶ pnpm dev`). The set is decided one of two ways:
-
-- **Detected** — the model returns each genuinely-distinct long-running service
-  (it won't split one app into build/lint/test). Nudge it with `--hint` if needed.
-- **Pinned** — list them in `.claude-run`, one `label: command` per line (above).
+Detection finds these on its own too — the model returns each genuinely-distinct
+long-running service, and won't split one app into build/lint/test. A single-service
+project stays a single unlabeled entry (`▶ pnpm dev`).
 
 ## Live localhost ports
 
-Alongside the run command, the status line shows the project's **currently running**
-localhost servers, as clickable links:
+Alongside the run command, the line shows the project's **currently running** localhost
+servers, as clickable links:
 
 ```
 ▶ pnpm dev   ◉ :3000 :5173
 ```
 
-Ports are found via `lsof` (`netstat -ano` on Windows) and **scoped to the
-project** — only listeners whose process is running inside the project directory
-are shown (so postgres, docker, and other machines' servers don't leak in). Ephemeral/internal ports (`≥ 49152`,
-e.g. `workerd` plumbing) and debuggers (`9229`) are filtered out. The scan is
-cached briefly (`RUNCOMMAND_PORTS_TTL_MS`, default 2.5s) so it stays cheap on the
-status-line hot path. Set `RUNCOMMAND_NO_PORTS=1` to hide them.
+Ports come from `lsof` (`netstat -ano` on Windows) and are **scoped to the project** — only
+listeners whose process runs inside the project directory show up, so postgres, docker and
+other repos' servers don't leak in. Ephemeral ports (`≥ 49152`) and debuggers (`9229`) are
+filtered, and the scan is cached for 2.5s so it stays cheap on the hot path.
+`RUNCOMMAND_NO_PORTS=1` hides them entirely.
 
-**Clickability.** Ports are clickable via OSC 8 hyperlinks (⌘-click in Ghostty;
-also iTerm2, WezTerm, kitty, VS Code). Two rendering styles, chosen per use and
-overridable with `RUNCOMMAND_PORT_STYLE`:
+Two link styles, set with `RUNCOMMAND_PORT_STYLE`: **`url`** (the status-line default)
+prints a full `http://localhost:PORT`, which terminals auto-link even without OSC 8
+support; **`compact`** (the prompt default) prints a short `:PORT` as an OSC 8 hyperlink —
+⌘-click in Ghostty, iTerm2, WezTerm, kitty, VS Code, and Claude Code's TUI passes OSC 8
+through, so it works there too.
 
-- **`compact`** — short `:PORT` as an OSC 8 hyperlink. Used in the shell prompt,
-  and it also works in **Claude Code's status bar** (confirmed: the TUI passes
-  OSC 8 through). Set `RUNCOMMAND_PORT_STYLE=compact` on the status-line command
-  to use it there.
-- **`url`** — full `http://localhost:PORT` as visible text, which terminals
-  auto-link even without OSC 8 support. The default for the status line, so it
-  stays clickable on terminals that lack OSC 8 hyperlinks. More verbose.
+## Other surfaces
 
-## Shell prompt (starship)
+Same tool, different places to put the line. Of the terminal AI tools only Claude Code and
+Qwen Code expose a config-based status line; for everything else, use an ambient surface.
 
 <p align="center">
   <img src="assets/shot-starship.png" width="720" alt="runcommand as a starship prompt tagline: ~/Code/principlestash.com on main  ▶ pnpm dev · :5173" />
 </p>
 
-Show the run command + clickable ports in your shell prompt too. Add a custom
-module to `~/.config/starship.toml`:
+**starship** — exactly what `runcommand init` writes:
 
 ```toml
 [custom.runcommand]
@@ -265,38 +200,14 @@ shell = ["bash", "--noprofile", "--norc"]
 ignore_timeout = true
 ```
 
-`promptline` is non-blocking and outputs an empty string when there's nothing to
-show, so the segment simply disappears in unrelated directories. Starship renders
-custom modules inline by default; for a right-aligned tagline add
-`right_format = "${custom.runcommand}"`. (`ignore_timeout` keeps a cold port scan
-from tripping starship's 500 ms command cap. For oh-my-zsh or a bare prompt, call
-the same command from a `precmd` hook.) This is exactly what `runcommand init` writes.
+`promptline` is non-blocking and prints nothing outside a project, so the segment simply
+disappears; `ignore_timeout` keeps a cold port scan under starship's 500 ms cap. For a
+right-aligned tagline add `right_format = "${custom.runcommand}"`. The trailing space
+inside `($output )` is load-bearing — starship trims a module's output, so without it the
+next segment renders as `:4321took 10s`.
 
-The trailing space inside `($output )` is load-bearing: starship trims a custom
-module's output, so without it the next segment — usually `cmd_duration` — renders
-as `:4321took 10s`. The surrounding `(…)` is a conditional group, so the space
-disappears along with the segment in directories that have nothing to show.
-
-## Other agents and prompts
-
-Same tool, different surfaces. `runcommand statusline` follows Claude Code's
-status-line contract (session JSON on stdin → one line on stdout), which several
-tools reuse.
-
-**Oh My Posh** — a `command` segment, like the starship module (add to a block in
-your theme; `properties` is being renamed to `options` upstream):
-
-```json
-{
-  "type": "command",
-  "style": "plain",
-  "properties": { "shell": "bash", "command": "runcommand promptline" },
-  "template": " {{ .Output }} "
-}
-```
-
-**Qwen Code** — it copied Claude Code's `statusLine` contract, so it drops in.
-Add to `~/.qwen/settings.json` (Qwen strips OSC 8, so `url` ports stay clickable):
+**Qwen Code** — it copied Claude Code's `statusLine` contract, so it drops straight into
+`~/.qwen/settings.json` (Qwen strips OSC 8, so `url` ports stay clickable):
 
 ```json
 { "ui": { "statusLine": {
@@ -305,47 +216,52 @@ Add to `~/.qwen/settings.json` (Qwen strips OSC 8, so `url` ports stay clickable
 } } }
 ```
 
-**OpenCode** — no status-line command; it loads TUI plugins. A ready-made plugin
-lives in [`integrations/opencode/`](integrations/opencode/) — it renders the run
-command + clickable ports into the footer. See its README to install.
+**Oh My Posh** — a `command` segment in a block of your theme (`properties` is being
+renamed to `options` upstream):
 
-**Codex** — no command-backed status line yet (tracked in
-[openai/codex#17827](https://github.com/openai/codex/issues/17827)). When it
-ships, its contract is Claude Code's, so it's a one-block write to
-`~/.codex/config.toml`:
-
-```toml
-[tui]
-status_line = ["model-with-reasoning", "context-remaining", "current-dir", "custom"]
-
-[tui.status_line_command]
-command = "runcommand statusline"
-refresh_interval_ms = 30000
-timeout_ms = 1000
+```json
+{ "type": "command", "style": "plain", "template": " {{ .Output }} ",
+  "properties": { "shell": "bash", "command": "runcommand promptline" } }
 ```
 
-## Terminal multiplexers & ambient surfaces
+**OpenCode** — no status-line command, but it loads TUI plugins: a ready-made one in
+[`integrations/opencode/`](integrations/opencode/) renders the command + ports into the
+footer. See its README to install.
+
+**Codex** — no command-backed status line yet
+([openai/codex#17827](https://github.com/openai/codex/issues/17827)). Its contract is Claude
+Code's, so when it ships it'll be a one-block write to `~/.codex/config.toml`.
+
+### Ambient surfaces
 
 Some tools — **aider**, **goose**, **Cursor**, **Codex**, GitHub **Copilot** — are
 full-screen TUIs with no status-line hook, so runcommand can't render *inside* them. It
-doesn't need to: an **ambient surface** shows the line *around* whatever's running, so it
-works for any tool in your terminal.
+doesn't need to: an ambient surface shows the line *around* whatever's running (and so does
+the shell prompt above, before you launch the tool).
 
-**tmux** — put the run command in the status bar; it stays visible the whole time you're
-inside aider/goose/etc., and tracks the active pane's project. **`runcommand init` wires
-this for you** — it appends with `set -ga` so your existing `status-right` (clock, etc.)
-is kept, not clobbered. The manual equivalent:
+**tmux** — the command stays visible the whole time you're inside aider/goose/etc., and
+tracks the active pane's project. `runcommand init` wires this for you, appending with
+`set -ga` so your existing `status-right` is kept, not clobbered:
 
 ```tmux
-# ~/.tmux.conf
 set -ga status-right " #(runcommand prompt -C '#{pane_current_path}')"
 ```
 
-`runcommand prompt` prints the plain command (and nothing in non-project dirs, so the
-segment just disappears). Append live ports with `#(runcommand ports -C '#{pane_current_path}')`.
+`runcommand prompt` prints the plain command, and nothing in non-project dirs. Append live
+ports with `#(runcommand ports -C '#{pane_current_path}')`.
 
-**Zellij** — its built-in status bar can't run commands, so this needs the
-[`zjstatus`](https://github.com/dj95/zjstatus) plugin (download `zjstatus.wasm` into
+**Terminal title** — a universal fallback, from a zsh `precmd()` or bash `PROMPT_COMMAND`
+(some TUIs overwrite it):
+
+```sh
+printf '\033]0;%s\007' "$(runcommand prompt)"
+```
+
+<details>
+<summary><b>Zellij</b> — needs the <code>zjstatus</code> plugin</summary>
+
+Zellij's built-in status bar can't run commands, so this needs
+[`zjstatus`](https://github.com/dj95/zjstatus) (download `zjstatus.wasm` into
 `~/.config/zellij/plugins/`). In your layout:
 
 ```kdl
@@ -359,19 +275,9 @@ pane size=1 borderless=true {
 }
 ```
 
-`runcommand init` detects zellij and prints these steps (it won't download the plugin
-for you). Note zjstatus runs the command from the session's directory, not per-pane.
-
-**Terminal title** — a universal fallback (shows in the tab/title bar even with no
-multiplexer, though some TUIs overwrite it). From a shell hook:
-
-```sh
-# zsh precmd() or bash PROMPT_COMMAND
-printf '\033]0;%s\007' "$(runcommand prompt)"
-```
-
-And the **shell prompt** ([starship](#shell-prompt-starship), Oh My Posh) is itself an
-ambient surface — it shows the line before you launch the tool.
+`runcommand init` detects zellij and prints these steps (it won't download the plugin for
+you). Note zjstatus runs the command from the session's directory, not per-pane.
+</details>
 
 ## Commands
 
@@ -389,35 +295,32 @@ runcommand uninstall         # remove that wiring (restores what was there; --dr
 runcommand agents            # show the detection chain — which agents are installed (--probe to test each)
 ```
 
-`dir` defaults to the current directory; the project root is resolved by walking
-up to the nearest `package.json` / manifest / `.git`.
+`dir` defaults to the current directory; the project root is the nearest `package.json` /
+manifest / `.git`, walking up.
 
-### Steering a wrong guess
-
-If detection picks the wrong command, tell it what's wrong with `--hint`:
+**Wrong guess?** Tell it what's wrong with `--hint`:
 
 ```sh
 runcommand refresh --hint "it's picking the API; I want the web dev server"
 # -> pnpm run dev:web
 ```
 
-The note is **saved with the project** and reused on every later re-detect, so a
-future manifest change won't regress to the wrong answer. Wipe it with
-`runcommand refresh --clear-hint`. For a hard, exact pin, use an override instead
-(below).
+The note is **saved with the project** and reused on every later re-detect, so a future
+manifest change won't regress to the wrong answer. Wipe it with `--clear-hint`; for a hard,
+exact pin use an [override](#overrides-instant-no-model-call).
 
 ## Config (env vars)
 
 | Var | Default | Purpose |
 | --- | --- | --- |
-| `RUNCOMMAND_AGENT` | *(auto)* | Detection agent priority list, tried in order, first installed wins — e.g. `opencode,claude`. Default: `claude,opencode,gemini,qwen,codex,cursor,crush,amp,llm,sgpt,aider,goose,copilot` (plus `ollama`, opt-in; see [Detection agent](#detection-agent)) |
+| `RUNCOMMAND_AGENT` | *(auto)* | Detection agent priority list, first installed wins — e.g. `opencode,claude` |
 | `RUNCOMMAND_DETECT_CMD` | – | Full custom detect command; the prompt is appended, or put where `{}` appears |
 | `RUNCOMMAND_AGENT_BIN` | – | Path to the agent binary (else auto-resolved) |
 | `RUNCOMMAND_MODEL` | `haiku`\* | Detection model (\*`haiku` for `claude`; the agent's own default otherwise) |
 | `RUNCOMMAND_BASE` | – | Another status-line command to render above ours |
 | `RUNCOMMAND_ICON` | `▶` | Leading glyph (set empty to drop it) |
 | `RUNCOMMAND_LABEL` | – | Text before the command, e.g. `run: ` |
-| `RUNCOMMAND_COLORS` | `36,33,35,34,32` | Per-service colors (ANSI codes), cycled by position; colorblind-safe default. Set to one code (e.g. `36`) for a single color |
+| `RUNCOMMAND_COLORS` | `36,33,35,34,32` | Per-service colors (ANSI codes), cycled by position; one code = one color |
 | `RUNCOMMAND_TTL_MS` | `0` (off) | Re-detect after this long even if the manifest is unchanged |
 | `RUNCOMMAND_PORT_STYLE` | `url` (statusline) / `compact` (prompt) | `url` = full clickable `http://localhost:PORT`; `compact` = `:PORT` OSC 8 link |
 | `RUNCOMMAND_NO_PORTS` | – | Hide live ports in the status line |
@@ -426,102 +329,39 @@ future manifest change won't regress to the wrong answer. Wipe it with
 | `RUNCOMMAND_CLAUDE` | – | Path to the `claude` binary (alias for `RUNCOMMAND_AGENT_BIN` when the agent is `claude`) |
 | `NO_COLOR` | – | Disable ANSI color |
 
-## Where the cache lives, and for how long
+## The cache
 
 `$XDG_CACHE_HOME/runcommand/` (falls back to `~/.cache/runcommand/`, or
-`%LOCALAPPDATA%\runcommand` on Windows), one JSON file per project, named
-`<sha1(project-root)>.json`.
+`%LOCALAPPDATA%\runcommand` on Windows), one JSON file per project.
 
-There is **no time-based expiry** by default — a detected command is cached
-*indefinitely*. It's invalidated by **content, not time**: each render hashes the
-project's signals and re-detects (in the background) the moment they change. The
-hash covers:
+There's **no time-based expiry** — a detected command is cached indefinitely and
+invalidated by **content, not time**. Every render hashes the project's signals
+(`package.json` scripts and `packageManager`, the lockfile and manifest list, the
+*contents* of command-defining manifests like `Makefile`, `Justfile`, `docker-compose*`,
+`Cargo.toml`, `pyproject.toml`, and any override) and re-detects in the background the
+moment they change — so when an agent, or you, edits one, the command updates itself.
+`RUNCOMMAND_TTL_MS` adds a fixed-age re-detect on top.
 
-- `package.json` scripts and the `packageManager` field,
-- the lockfile and the list of manifest files present,
-- the **contents** of command-defining manifests — `Makefile`, `Justfile`,
-  `Taskfile`, `Procfile`, `docker-compose*`, `Cargo.toml`, `pyproject.toml`,
-  `composer.json`, `mix.exs`, `Gemfile`, `deno.json`,
-- any `.claude-run` override, and a `Run:` line in `CLAUDE.md`.
-
-So when an agent (or you) edits any of those, the command updates itself — no need
-to remember to refresh. Otherwise the answer (and any saved `--hint`) persists
-until you `refresh` it or delete the file.
-
-Set `RUNCOMMAND_TTL_MS` to also re-detect after a fixed age regardless of
-changes (off by default).
-
-## Versioning and compatibility
-
-runcommand persists three quite different kinds of state, and each gets a
-different compatibility rule. Worth knowing before you upgrade — or before you
-change one of these formats.
-
-**1. The detection cache — versioned, and disposable.** Every cache file carries a
-`"v"` field. A file whose `v` this build doesn't recognise is treated as a plain
-cache miss, exactly like a signals-hash mismatch, and re-detected. That's safe in
-both directions: an old build ignores a field it's never heard of, and a new build
-refuses to read a shape it doesn't understand. It's cheap to be strict here — the
-cache is derived state, so the entire cost of discarding one is a single detection
-call. (Upgrading to this version invalidates existing caches once, for that
-reason.) The separate ports cache is deliberately *not* versioned; it self-heals
-inside its 2.5 s TTL.
-
-**2. The generated config blocks — versioned, and migrated.** This is the one that
-actually needs care, because **`npm i -g runcommand@latest` cannot fix it**. `init`
-writes real lines into files you own — `~/.config/starship.toml`, `~/.tmux.conf` —
-and a package upgrade never revisits them. So each block is fenced with a
-version-stamped marker:
-
-```toml
-# >>> runcommand v2 (managed by `runcommand init`)
-...
-# <<< runcommand
-```
-
-Re-run `runcommand init` after upgrading and it compares that stamp against the
-current `BLOCK_V`. An older block is reported and **offered an in-place refresh** —
-only the lines between the markers are touched, spacing around them is preserved,
-and the file is backed up first, like every other write `init` makes. Older,
-unversioned markers (`# >>> runcommand`, written before this existed) are still
-recognised as v1, so nothing installed by an earlier release is stranded.
-
-If you wired runcommand up **by hand**, there are no markers and `init` will never
-rewrite your file — it prints the one-line change to make and leaves the file
-byte-for-byte alone.
-
-**3. Your `.claude-run` and `CLAUDE.md` overrides — never versioned.** These are
-input you wrote, not state runcommand generated. The rule is simply that the syntax
-only ever grows: new forms get added, existing ones keep working. Asking you to
-migrate a file you authored would be the wrong trade.
-
-A related note on the cache shape: `normalizeCommands` still reads the original
-single-`command` form as well as today's `commands` array, which is why multi-command
-support was added as a new field rather than a rename. Both are covered by tests.
-
-### Releasing
-
-Releases go through [changesets](https://github.com/changesets/changesets): every
-user-visible change gets a `pnpm changeset` note, `pnpm version` consumes them into
-a version bump and `CHANGELOG.md`, and `pnpm release` publishes.
-
-The rule that matters is the one changesets can't enforce on its own — **the npm
-version and `BLOCK_V` are independent, and only `BLOCK_V` affects config people
-already have on disk.** So a release that changes a generated block is a `minor` at
-minimum and its note must say *re-run `runcommand init`*. A test
-(`test/block-version.test.mjs`) fingerprints every generated block and pins it to
-the current `BLOCK_V`, so changing one without bumping the version fails the build
-rather than silently stranding existing installs.
-
-`pnpm test` runs on Linux, macOS **and Windows** in CI, plus a CLI smoke test on
-each — that matrix is the only place the Windows code actually executes.
+Cache files carry a version, and a build that doesn't recognise it treats the file as a
+plain miss. The config blocks `init` writes are versioned too, so **re-run `runcommand
+init` after upgrading**: it offers an in-place refresh of any stale block, and never
+touches a config you wired by hand. Full rules in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Windows
 
-Windows is wired up but **has not been run on a real Windows machine** — treat it
-as best-effort and please open an issue with what breaks. Rendering is the easy
-half: Windows Terminal handles ANSI styling and OSC 8 hyperlinks, so the line and
-its clickable ports should look the same as anywhere else. What differs underneath:
+Windows is wired up but **has not been run on a real Windows machine** — treat it as
+best-effort and please open an issue with what breaks. Rendering is the easy half: Windows
+Terminal handles ANSI styling and OSC 8, so the line and its clickable ports look the same
+as anywhere else.
+
+The one real compromise is port scoping: Windows exposes no process working directory to a
+plain CLI, so runcommand matches the project path against each listener's **command line**
+instead. That covers the common case (a dev server launched from the project carries the
+path in its argv) and is deliberately biased toward showing *nothing* rather than another
+project's port — `runcommand ports --all` ignores scoping entirely.
+
+<details>
+<summary>What else differs underneath</summary>
 
 | | macOS / Linux | Windows |
 |---|---|---|
@@ -532,35 +372,16 @@ its clickable ports should look the same as anywhere else. What differs undernea
 | PATH install | symlink into `~/.local/bin` | `npm i -g <repo>` (symlinks need Developer Mode) |
 | Cache dir | `~/.cache/runcommand` | `%LOCALAPPDATA%\runcommand` |
 
-The port scoping is the one real compromise. Windows exposes no process working
-directory to a plain CLI — there's no `lsof -d cwd` equivalent, and
-`Win32_Process` doesn't carry cwd — so runcommand matches the project path against
-each listener's **command line** instead. That covers the common case (a dev server
-launched from the project has the path in its argv: `node ...\node_modules\vite\bin\vite.js`)
-and is deliberately biased toward showing *nothing* rather than showing another
-project's port. A server whose argv never mentions the project path won't be
-picked up; `runcommand ports --all` ignores scoping entirely and lists every
-localhost listener.
+`init` won't offer tmux on Windows (no `tmux` binary, no `~/.tmux.conf`); Claude Code and
+starship wiring are unchanged, since both keep their config under `~/`.
+</details>
 
-Two Windows details worth knowing: `netstat`'s state column is localized, so
-listeners are identified by their foreign address (`:0`) rather than by matching
-the word `LISTENING`; and the `Win32_Process` query costs a PowerShell spawn, which
-the 2.5 s port cache (`RUNCOMMAND_PORTS_TTL_MS`) keeps off the hot path.
+## Development
 
-`runcommand init` won't offer tmux on Windows — neither a `tmux` binary nor a
-`~/.tmux.conf` is found, so it isn't listed as installed. Claude Code and starship
-wiring work the same, since both keep their config under `~/`.
-
-## How detection works
-
-1. **Override?** `.claude-run` / `.runcommand` file, or a `Run:` line in
-   `CLAUDE.md` (outside code fences) → used as-is.
-2. Otherwise, collect signals — `package.json` scripts, the package manager (from
-   the `packageManager` field or the lockfile), the list of manifest/config
-   files, and a run hint from the README — and ask the [detection agent](#detection-agent)
-   (`claude -p` by default) for the single dev/run command.
-3. Cache it against a hash of those signals. Next render is a cache hit until the
-   signals change.
+`pnpm test` runs the suite — on Linux, macOS **and** Windows in CI, which is the only place
+the Windows code actually executes. The [`site/`](site/) directory is an Astro showcase
+(`pnpm site`). Release process and the versioning rules for generated config blocks are in
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

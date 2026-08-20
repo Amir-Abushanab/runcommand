@@ -1,11 +1,21 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import Terminal from "../components/Terminal.astro";
+import { Code } from "astro:components";
+import statusbarShot from "../../../assets/shot-statusbar.svg";
+import starshipShot from "../../../assets/shot-starship.svg";
 import { readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 
 const repo = "https://github.com/amir-abushanab/runcommand";
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const codeThemes = { light: "github-light", dark: "github-dark" } as const;
+const inlineCodeTransformers = [{
+  name: "remove-inline-tabindex",
+  pre(node: { properties: Record<string, unknown> }) {
+    delete node.properties.tabindex;
+  },
+}];
 
 // Build stamp for the footer: CLI version (root package.json) + short commit.
 const version = JSON.parse(readFileSync(new URL("../../../package.json", import.meta.url), "utf8")).version;
@@ -17,83 +27,120 @@ try { commit = execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim
 const favImg = (file) => `<img class="tool-fav" src="${base}/favicons/${file}" alt="" width="14" height="14" loading="lazy" onerror="this.remove()">`;
 // A tool name linked to its site with its favicon. Omit `file` for no icon.
 const toolLink = (href, label, file) => `<a class="tool-link" href="${href}" target="_blank" rel="noopener">${file ? favImg(file) : ""}<span>${label}</span></a>`;
+const commandExample = (logo, command) => `<span class="command-example"><svg class="command-logo" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><use href="${base}/logos/command-logos.svg#${logo}"></use></svg><code>${command}</code></span>`;
 
-// Each card its own hue from a cyan→violet ramp — distinct, but all in the
-// blue-green-violet family around the cyan brand. light-dark() pairs so each reads
-// on both grounds.
+const cacheExample = `// Usually: ~/.cache/runcommand/<project-hash>.json
+{
+  "root": "/Users/you/Code/app",
+  "commands": [
+    {
+      "command": "pnpm dev"
+    }
+  ],
+  "source": "llm",
+  "agent": "claude",
+  "signalsHash": "7cf0d4…",
+  "detectedAt": 1786924800000
+}`;
+
 const features = [
-  { icon: "◆", color: "light-dark(#0e7490,#22d3ee)", title: "LLM-detected", body: "A quick headless call to your AI CLI — Claude by default; Gemini, Cursor, OpenCode, and more — reads your package.json scripts, lockfile and manifests to work out the real dev command: pnpm dev, cargo run, mix phx.server, docker compose up." },
-  { icon: "↯", color: "light-dark(#0f766e,#2dd4bf)", title: "Cached, never blocking", body: "Detected once, then cached per project. The status line is a ~50ms cache read; detection runs in the background." },
-  { icon: "↻", color: "light-dark(#0369a1,#38bdf8)", title: "Self-healing", body: "The cache is keyed to a fingerprint of your manifests. Edit a Makefile target or a package.json script and it re-detects on the next render. Nothing to remember." },
-  { icon: "◉", color: "light-dark(#1d4ed8,#60a5fa)", title: "Live ports", body: "Shows the localhost servers actually running for this project, scoped by process working dir, as clickable links. Databases and other projects don't leak in." },
-  { icon: "▤", color: "light-dark(#4f46e5,#818cf8)", title: "Runs everywhere", body: `One CLI across ${toolLink("https://claude.com/claude-code", "Claude Code", "claude.svg")}, ${toolLink("https://starship.rs", "starship", "starship.png")}, ${toolLink("https://opencode.ai", "OpenCode", "opencode.svg")}, and ${toolLink("https://github.com/QwenLM/qwen-code", "Qwen Code", "qwen.png")}, plus ${toolLink("https://github.com/openai/codex", "Codex")} once it ships a status-line hook. No hook? It rides your tmux/zellij status bar or shell prompt — around any TUI, aider and goose included.` },
-  { icon: "✦", color: "light-dark(#7c3aed,#a78bfa)", title: "Colorblind-safe", body: "Each service in a monorepo gets its own colour from a colorblind-safe palette. Labels tell them apart even when the colours can't." },
+  { icon: "◆", color: "light-dark(#0e7490,#22d3ee)", title: "Detects the command", body: `An installed AI CLI reads the project and returns the command it expects: ${commandExample("pnpm", "pnpm dev")}, ${commandExample("python", "uvicorn main:app")}, ${commandExample("rails", "bin/rails server")}, ${commandExample("rust", "cargo run")}, ${commandExample("go", "go run .")}, ${commandExample("elixir", "mix phx.server")}, ${commandExample("dotnet", "dotnet run")}, ${commandExample("gradle", "./gradlew bootRun")}, ${commandExample("docker", "docker compose up")}, and more.`, visual: "detect", example: null },
+  { icon: "↯", color: "light-dark(#0f766e,#2dd4bf)", title: "Reads from a cache", body: "Each project is detected once. Status lines read a machine-managed JSON cache; a miss starts detection in the background. A cache entry looks like this:", visual: "cache", example: cacheExample },
+  { icon: "↻", color: "light-dark(#0369a1,#38bdf8)", title: "Refreshes after changes", body: "The cache key includes the project's manifests. Change a script or Make target and the next render schedules a new detection.", visual: "refresh", example: null },
+  { icon: "◉", color: "light-dark(#1d4ed8,#60a5fa)", title: "Finds project ports", body: "Lists listening ports owned by processes inside the current project. Ports from databases and other projects are excluded.", visual: "ports", example: null },
+  { icon: "▤", color: "light-dark(#4f46e5,#818cf8)", title: "Fits existing tools", body: `One binary, rendered by whatever status bar or prompt you already run. <code>runcommand init</code> wires up what it finds and keeps the status line you already had.`, visual: "tools", example: null },
+  { icon: "✦", color: "light-dark(#7c3aed,#a78bfa)", title: "Handles multiple services", body: "Labels each command in a monorepo and assigns distinct colours. The labels keep services identifiable without relying on colour alone.", visual: "services", example: null },
 ];
 
-const steps = [
-  { n: "1", title: "Detect", body: "Your AI CLI (Claude by default; Gemini, Cursor, OpenCode, …) reads the project's signals and returns the dev/run command (or several, for a monorepo)." },
-  { n: "2", title: "Cache", body: "Saved per project under ~/.cache/runcommand, keyed to a hash of the manifests that define it." },
-  { n: "3", title: "Serve", body: "Status lines and prompts read the cache instantly; live ports come from a short-cached lsof scan." },
-  { n: "4", title: "Self-heal", body: "Change a manifest, the fingerprint changes, and a background re-detect refreshes the answer." },
+// One per category — agent, shell prompt, multiplexer — so the row set reads as
+// "anywhere", not "four AI tools". tmux ships no favicon, so it uses a text mark
+// like the integrations list does.
+const featureHosts = [
+  { icon: "claude.svg", mark: null, label: "Claude Code" },
+  { icon: "starship.png", mark: null, label: "starship" },
+  { icon: null, mark: "tm", label: "tmux" },
 ];
 
 const commands = [
-  ["init", "Detect your tools and wire runcommand into each  ·  --dry-run --yes --surfaces"],
-  ["statusline", "Render the run command + live ports (Claude Code / Qwen Code call this)"],
-  ["prompt", "Plain run command for a shell prompt (non-blocking)"],
-  ["promptline", "Run command + clickable ports, styled (starship module)"],
-  ["ports", "This project's live localhost ports  ·  --links --urls --json --all"],
-  ["json", "Structured { commands, ports } for plugins (the OpenCode plugin uses this)"],
-  ["detect", "Detect now (asks the detection agent), print + cache"],
-  ["get", "Print the cached command (detect if missing)"],
-  ["refresh", "Re-detect  ·  --hint \"what's wrong\" to steer, --clear-hint to reset"],
+  ["init", "Find supported tools and configure them  ·  --dry-run --yes --surfaces"],
+  ["statusline", "Print the command and live ports for Claude Code or Qwen Code"],
+  ["prompt", "Print the cached command for a shell prompt"],
+  ["promptline", "Print a styled command and clickable ports for starship"],
+  ["ports", "List this project's live localhost ports  ·  --links --urls --json --all"],
+  ["json", "Return { commands, ports } for integrations such as OpenCode"],
+  ["detect", "Run detection now, then print and cache the result"],
+  ["get", "Print the cached command; detect it if missing"],
+  ["refresh", "Run detection again  ·  --hint \"correction\" --clear-hint"],
   ["path", "Print the cache file path for a project"],
-  ["agents", "Show the detection chain — which agents are installed  ·  --probe to test each"],
-  ["uninstall", "Remove runcommand's wiring (restores what was there)"],
+  ["agents", "List detection agents  ·  --probe tests each one"],
+  ["uninstall", "Remove runcommand's config and restore backups"],
 ];
 
-// color = brand colour shown on hover; near-black brands fall back to the theme
-// text colour so they stay visible. osc8: false marks terminals without OSC 8.
-// url = official homepage, opened in a new tab.
 const terminals = [
-  { slug: "ghostty", name: "Ghostty", color: "#3551F3", url: "https://ghostty.org" },
-  { slug: "iterm2", name: "iTerm2", color: "var(--text)", url: "https://iterm2.com" },
-  { slug: "wezterm", name: "WezTerm", color: "#4E49EE", url: "https://wezterm.org" },
-  { slug: "kitty", name: "kitty", color: "#C0C81F", url: "https://sw.kovidgoyal.net/kitty/" },
-  { slug: "alacritty", name: "Alacritty", color: "#F46D01", url: "https://alacritty.org" },
-  { slug: "warp", name: "Warp", color: "#01A4FF", url: "https://www.warp.dev" },
-  { slug: "windowsterminal", name: "Windows Terminal", color: "#4CC2FF", url: "https://github.com/microsoft/terminal" },
-  { slug: "visualstudiocode", name: "VS Code", color: "#0098FF", url: "https://code.visualstudio.com" },
-  { slug: "gnometerminal", name: "GNOME Terminal", color: "var(--text)", url: "https://help.gnome.org/users/gnome-terminal/stable/" },
-  { slug: "apple", name: "Apple Terminal", color: "var(--text)", osc8: false, url: "https://support.apple.com/guide/terminal/welcome/mac" },
+  { slug: "ghostty", name: "Ghostty", color: "#3551F3", osc8: true },
+  { slug: "iterm2", name: "iTerm2", color: "var(--text)", osc8: true },
+  { slug: "wezterm", name: "WezTerm", color: "#4E49EE", osc8: true },
+  { slug: "kitty", name: "kitty", color: "#C0C81F", osc8: true },
+  { slug: "alacritty", name: "Alacritty", color: "#F46D01", osc8: true },
+  { slug: "warp", name: "Warp", color: "#01A4FF", osc8: true },
+  { slug: "windowsterminal", name: "Windows Terminal", color: "#4CC2FF", osc8: true },
+  { slug: "visualstudiocode", name: "VS Code", color: "#0098FF", osc8: true },
+  { slug: "gnometerminal", name: "GNOME Terminal", color: "var(--text)", osc8: true },
+  { slug: "apple", name: "Apple Terminal", color: "var(--text)", osc8: false },
 ];
 
-// Inline links for tools named in prose (opened in a new tab).
-const tools = {
-  claude: "https://claude.com/claude-code",
-  starship: "https://starship.rs",
-  qwen: "https://github.com/QwenLM/qwen-code",
-  opencode: "https://opencode.ai",
-  codex: "https://github.com/openai/codex",
-};
+const installNote = `<code>runcommand init</code> finds supported tools, updates their config, and backs up changed files. It needs Node and one supported AI CLI for detection. <a href="${repo}" rel="noopener">Read the setup guide &rarr;</a>`;
 
-// Prose with inline tool links + favicons, injected via set:html.
-const installNote = `Detects the tools you have — ${toolLink(tools.claude, "Claude Code", "claude.svg")}, ${toolLink(tools.qwen, "Qwen", "qwen.png")}, ${toolLink(tools.starship, "starship", "starship.png")}, tmux — and wires each up, backing up every file it touches. Zero dependencies: just Node and your agent's CLI (<code>claude</code> by default). <a href="${repo}" rel="noopener">Full setup &rarr;</a>`;
-const surfacesLead = `One CLI speaking ${toolLink(tools.claude, "Claude Code", "claude.svg")}'s <code>statusLine</code> contract (JSON in, a line out). Everything that copied that contract gets it for free, plus a native ${toolLink(tools.opencode, "OpenCode", "opencode.svg")} plugin.`;
+const surfaceTools = [
+  {
+    category: "Tool", name: "Claude Code", suffix: "", detail: "Status line", icon: `${base}/favicons/claude.svg`, logo: null, color: null, mark: null,
+    preview: { src: statusbarShot.src, title: "Claude Code status line", alt: "Claude Code status line showing pnpm dev and ports 3000 and 5173", caption: "The cached command and current project ports appear below Claude Code's own status line.", width: 900, height: 158 },
+  },
+  { category: "Tool", name: "Qwen Code", suffix: "", detail: "Status line", icon: `${base}/favicons/qwen.png`, logo: null, color: null, mark: null, preview: null },
+  { category: "Tool", name: "OpenCode", suffix: "", detail: "TUI footer", icon: `${base}/favicons/opencode.svg`, logo: null, color: null, mark: null, preview: null },
+  {
+    category: "Tool", name: "starship", suffix: "", detail: "Shell prompt", icon: `${base}/favicons/starship.png`, logo: null, color: null, mark: null,
+    preview: { src: starshipShot.src, title: "starship shell prompt", alt: "Starship prompt showing pnpm dev and port 5173 beside the current directory and branch", caption: "The custom starship module prints the cached command and makes each compact port an OSC 8 link.", width: 900, height: 158 },
+  },
+  { category: "Tool", name: "tmux", suffix: "", detail: "Status bar", icon: null, logo: null, color: null, mark: "tm", preview: null },
+  { category: "Tool", name: "zellij", suffix: "", detail: "Status bar", icon: null, logo: null, color: null, mark: "zj", preview: null },
+];
+
+const surfaceItems = [
+  ...surfaceTools,
+  ...terminals.map((terminal) => ({
+    category: "Terminal",
+    name: terminal.name,
+    suffix: terminal.osc8 === false ? "*" : "",
+    detail: terminal.osc8 === false ? "Full URL links" : "OSC 8 links",
+    icon: null,
+    logo: terminal.slug,
+    color: terminal.color,
+    mark: null,
+    preview: terminal.osc8 === false ? null : {
+      src: starshipShot.src,
+      title: `${terminal.name} terminal`,
+      alt: `A shell prompt showing pnpm dev and a compact localhost port link in ${terminal.name}`,
+      caption: `The prompt layout comes from starship. In ${terminal.name}, compact ports use OSC 8 links.`,
+      width: 900,
+      height: 158,
+    },
+  })),
+];
 
 const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 014 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48l-.01 2.2c0 .21.15.46.55.38A8 8 0 008 .2z";
 ---
 
 <Layout
-  title="runcommand: your project's run command, in the status bar"
-  description="A tiny, dependency-free CLI that detects each project's run command and shows it, with live clickable localhost ports, in your Claude Code status bar, shell prompt, and more."
+  title="runcommand: project run commands in your status line"
+  description="A dependency-free CLI that detects a project's run command, caches it, and shows it with live local ports in status lines and shell prompts."
 >
   <header class="nav">
     <div class="wrap nav-in">
       <a class="brand" href="#top"><span class="brand-mark">▶</span> runcommand</a>
       <nav class="nav-links">
-        <a href="#how">How it works</a>
-        <a href="#surfaces">Surfaces</a>
+        <a href="#features">How it works</a>
+        <a href="#surfaces">Integrations</a>
         <a href="#commands">Commands</a>
         <a href={repo} rel="noopener" class="nav-gh">
           <svg class="gh-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><path d={GH_PATH} /></svg>
@@ -116,7 +163,7 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
             status bar and prompt.
           </p>
           <div class="cta">
-            <a class="btn btn-primary" href="#how">See how it works</a>
+            <a class="btn btn-primary" href="#features">See how it works</a>
             <a class="btn btn-ghost" href={repo} rel="noopener">
               <svg class="gh-icon" viewBox="0 0 16 16" width="18" height="18" aria-hidden="true" fill="currentColor"><path d={GH_PATH} /></svg>
               View on GitHub
@@ -131,9 +178,9 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
 
         <div class="hero-demo" id="cc-widget" role="img"
              aria-label="In Claude Code, the /runcommand slash command detects the run command and shows it in the status line: pnpm dev, serving localhost:5173.">
-          <Terminal title="Claude Code" caption="Type /runcommand — it detects the command and its live port.">
+          <Terminal title="Claude Code" caption="Run /runcommand to detect the command and list current ports.">
 <span class="cc-box"><span class="cc-caret">&gt;</span> <span id="cc-typed" class="cc-typed">/runcommand</span><span id="cc-cursor" class="cc-cursor" hidden>▍</span></span>
-<span class="ln"><span class="dim">[Opus] · principlestash.com · 42% context</span></span>
+<span class="ln"><span class="dim">[Opus] · principlestash.com · <span id="cc-context">43%</span> context</span></span>
 <span class="ln" id="cc-run"><span class="dim">▶</span> <span class="cyan">pnpm dev</span>  <span class="dim">◉</span> <span class="cc-port">:5173</span></span>
           </Terminal>
         </div>
@@ -141,142 +188,132 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
     </section>
 
     <!-- FEATURES -->
-    <section class="features">
+    <section id="features" class="features">
       <div class="wrap">
         <p class="eyebrow">Features</p>
-        <h2>What it does</h2>
+        <h2>What runcommand does</h2>
         <ul class="cards" role="list">
           {features.map((f) => (
             <li class="card">
               <span class="card-icon" aria-hidden="true" style={`color:${f.color}`}>{f.icon}</span>
               <h3>{f.title}</h3>
               <p set:html={f.body}></p>
+              {f.visual === "detect" && (
+                <div class="card-visual feature-demo feature-detect" aria-hidden="true">
+                  <span class="visual-kicker">Project signals</span>
+                  <div class="visual-chip-row">
+                    <span class="visual-chip">package.json</span>
+                    <span class="visual-chip">pyproject.toml</span>
+                    <span class="visual-chip">Gemfile</span>
+                    <span class="visual-chip">Cargo.toml</span>
+                    <span class="visual-chip">Makefile</span>
+                  </div>
+                  <div class="visual-result"><span>▶</span><code>pnpm dev</code></div>
+                </div>
+              )}
+              {f.example && (
+                <Code class="card-visual cache-example" code={f.example} lang="jsonc" themes={codeThemes} tabindex="0" />
+              )}
+              {f.visual === "refresh" && (
+                <div class="card-visual feature-demo feature-refresh" aria-hidden="true">
+                  <span class="visual-kicker">Manifest fingerprint</span>
+                  <div class="refresh-row"><span class="refresh-mark is-change">~</span><code>package.json</code><span>changed</span></div>
+                  <div class="refresh-row"><span class="refresh-mark">↻</span><span>detecting again</span></div>
+                  <div class="refresh-row"><span class="refresh-mark is-done">✓</span><code>pnpm run dev:web</code></div>
+                </div>
+              )}
+              {f.visual === "ports" && (
+                <div class="card-visual feature-demo feature-ports" aria-hidden="true">
+                  <span class="visual-kicker">Listening in this project</span>
+                  <div class="visual-result"><span>▶</span><code>pnpm dev</code></div>
+                  <div class="visual-port-row"><span><i></i>:3000</span><span><i></i>:5173</span></div>
+                </div>
+              )}
+              {f.visual === "tools" && (
+                <div class="card-visual feature-demo feature-hosts" aria-hidden="true">
+                  <span class="visual-kicker">One line, every surface</span>
+                  {featureHosts.map((h) => (
+                    <div class="host-row">
+                      {h.icon
+                        ? <img class="host-icon" src={`${base}/favicons/${h.icon}`} alt="" width="18" height="18" loading="lazy" />
+                        : <span class="host-mark">{h.mark}</span>}
+                      <span class="host-name">{h.label}</span>
+                      <code>▶ pnpm dev</code>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {f.visual === "services" && (
+                <div class="card-visual feature-demo feature-services" aria-hidden="true">
+                  <span class="visual-kicker">monorepo · web + api</span>
+                  <div class="service-row"><span class="service-label is-web">web</span><code>pnpm dev:web</code><span class="service-port">:5173</span></div>
+                  <div class="service-row"><span class="service-label is-api">api</span><code>pnpm dev:api</code><span class="service-port">:3000</span></div>
+                </div>
+              )}
             </li>
           ))}
         </ul>
-      </div>
-    </section>
-
-    <!-- HOW IT WORKS -->
-    <section id="how" class="how">
-      <div class="wrap">
-        <p class="eyebrow">How it works</p>
-        <h2>Detect once, cache, serve, self-heal.</h2>
-        <p class="lead">The status line never waits on the model. Detection is a background job behind a content-addressed cache.</p>
-        <ol class="flow" role="list">
-          {steps.map((s) => (
-            <li class="step">
-              <span class="step-n" aria-hidden="true">{s.n}</span>
-              <h3>{s.title}</h3>
-              <p>{s.body}</p>
-            </li>
-          ))}
-        </ol>
-
-        <div class="how-demos">
-          <Terminal title="zsh · steering a wrong guess">
-<span class="ln"><span class="green">❯</span> <span class="white">runcommand get</span></span>
-<span class="ln"><span class="cyan">pnpm dev</span></span>
-<span class="ln"><span class="green">❯</span> <span class="white">runcommand refresh --hint </span><span class="yellow">"it's the web app, not the api"</span></span>
-<span class="ln"><span class="cyan">pnpm run dev:web</span>   <span class="comment"># saved, so re-detects won't regress</span></span>
-          </Terminal>
-          <Terminal title="pin it exactly · .claude-run">
-<span class="ln"><span class="comment"># one command per line, optional label:</span></span>
-<span class="ln"><span class="white">api:</span> go run ./cmd/server</span>
-<span class="ln"><span class="white">web:</span> pnpm dev</span>
-          </Terminal>
-        </div>
       </div>
     </section>
 
     <!-- SURFACES -->
     <section id="surfaces" class="surfaces">
       <div class="wrap">
-        <p class="eyebrow">Surfaces</p>
-        <h2>The same answer, wherever you look.</h2>
-        <p class="lead" set:html={surfacesLead}></p>
+        <p class="eyebrow">Integrations</p>
+        <h2>Status lines, prompts, and terminal links.</h2>
+        <p class="lead">runcommand writes the cached command to each tool's available UI. Ports use OSC 8 links where the terminal supports them. Click a terminal or tool to open its screenshot when one is available.</p>
 
-        <div class="surface-grid">
-          <!-- Claude Code: tool-call transcript, bordered prompt, status line -->
-          <figure class="sfc-fig">
-            <div class="sfc">
-              <div class="sfc-tt"><span class="sfc-dots"><i></i><i></i><i></i></span><span class="sfc-ttl">principlestash — claude</span></div>
-              <div class="sfc-body">
-                <span class="ln"><span class="c-ok">⏺</span> Read(<span class="c-path">package.json</span>)</span>
-                <span class="ln sfc-ind c-dim">⎿ 3 dev scripts — web, api, jobs</span>
-                <span class="ln sfc-cc-prompt"><span class="c-claude">&gt;</span> how do I run this?</span>
-                <span class="ln c-dim">opus · principlestash · 42% context</span>
-                <span class="ln"><span class="c-dim">▶</span> <span class="c-dim">web:</span> <span class="c-cmd">pnpm dev</span> <span class="c-dim">·</span> <span class="c-dim">api:</span> <span class="c-magenta">mix phx.server</span> <span class="c-dim">·</span> <span class="c-dim">jobs:</span> <span class="c-green">cargo run</span></span>
-              </div>
-            </div>
-            <figcaption>Claude Code — one line per service, each its own colour.</figcaption>
-          </figure>
-
-          <!-- starship: colored prompt segments + the run tagline -->
-          <figure class="sfc-fig">
-            <div class="sfc">
-              <div class="sfc-tt"><span class="sfc-dots"><i></i><i></i><i></i></span><span class="sfc-ttl">zsh</span></div>
-              <div class="sfc-body">
-                <span class="ln"><span class="row"><span><span class="c-dir">~/Code/principlestash.com</span> <span class="c-dim">on</span> <span class="c-git"> main</span></span><span><span class="c-dim">▶</span> <span class="c-cmd">pnpm dev</span> <span class="c-dim">·</span> <a href="http://localhost:5173">:5173</a></span></span></span>
-                <span class="ln"><span class="c-ok">❯</span> <span class="c-dim">▍</span></span>
-              </div>
-            </div>
-            <figcaption>starship — a right-aligned tagline; ports clickable via OSC 8.</figcaption>
-          </figure>
-
-          <!-- OpenCode: session pill + host-owned bottom bar -->
-          <figure class="sfc-fig">
-            <div class="sfc">
-              <div class="sfc-tt"><span class="sfc-dots"><i></i><i></i><i></i></span><span class="sfc-ttl">principlestash — opencode</span></div>
-              <div class="sfc-body">
-                <span class="ln"><span class="oc-badge">opencode</span> <span class="c-dim">anthropic/claude-sonnet-4-5</span></span>
-                <span class="ln"><span class="c-cmd">▌</span> where does the dev server start?</span>
-                <span class="ln c-dim">  <span class="c-path">package.json</span> → the <span class="c-cmd">dev</span> script runs vite.</span>
-              </div>
-              <div class="oc-bar">
-                <span class="c-dim">~/principlestash.com</span>
-                <span><span class="c-dim">▶</span> <span class="c-cmd">bun dev</span>  <span class="c-dim">◉</span> <a href="http://localhost:3000">:3000</a></span>
-              </div>
-            </div>
-            <figcaption>OpenCode — a native plugin in the host-owned bottom bar.</figcaption>
-          </figure>
-
-          <!-- tmux: the iconic green status bar -->
-          <figure class="sfc-fig">
-            <div class="sfc">
-              <div class="sfc-tt"><span class="sfc-dots"><i></i><i></i><i></i></span><span class="sfc-ttl">tmux</span></div>
-              <div class="sfc-body">
-                <span class="ln"><span class="c-ok">$</span> aider</span>
-                <span class="ln c-dim">  Aider v0.86 · main · repo-map: 4k tokens</span>
-                <span class="ln c-dim">  <span class="c-cmd">architect&gt;</span> ▍</span>
-              </div>
-              <div class="tmux-bar">
-                <span class="tmux-sess">dev</span>
-                <span class="tmux-win">0:aider*  1:zsh</span>
-                <span class="tmux-right"><span>▶</span> pnpm dev · :5173</span>
-              </div>
-            </div>
-            <figcaption>tmux — in the status bar, so it shows even inside aider.</figcaption>
-          </figure>
-        </div>
-
-        <h3 class="compat-h">Clickable in every terminal</h3>
-        <p class="lead">The ports are real links. ⌘-click (or your terminal's link modifier) opens them anywhere OSC 8 hyperlinks are supported. Hover a logo to see it in its colours:</p>
-        <ul class="logos" role="list">
-          {terminals.map((t) => (
-            <li class="logo-item">
-              <a href={t.url} target="_blank" rel="noopener" aria-label={t.name}>
-                <span class="ico" style={`--logo:url("${base}/logos/${t.slug}.svg");--brand:${t.color}`}></span>
-                <span>{t.name}{t.osc8 === false ? "*" : ""}</span>
-              </a>
+        <ul class="surface-list" role="list">
+          {surfaceItems.map((item) => (
+            <li class="surface-item">
+              <button
+                class="surface-trigger"
+                type="button"
+                disabled={!item.preview}
+                data-preview-src={item.preview?.src}
+                data-preview-title={item.preview?.title}
+                data-preview-alt={item.preview?.alt}
+                data-preview-caption={item.preview?.caption}
+                data-preview-width={item.preview?.width}
+                data-preview-height={item.preview?.height}
+                aria-label={item.preview ? `View ${item.name} screenshot` : undefined}
+              >
+                <span class="surface-ident">
+                  {item.icon && <img class="surface-icon-img" src={item.icon} alt="" width="28" height="28" loading="lazy" />}
+                  {item.logo && <span class="surface-logo" aria-hidden="true" style={`--logo:url("${base}/logos/${item.logo}.svg");--brand:${item.color}`}></span>}
+                  {item.mark && <span class="surface-mark" aria-hidden="true">{item.mark}</span>}
+                  <span>
+                    <span class="surface-name">{item.name}{item.suffix}</span>
+                    <span class="surface-detail">{item.detail}</span>
+                  </span>
+                </span>
+                <span class="surface-meta">
+                  <span class="surface-kind">{item.category}</span>
+                  {!item.preview && <span class="surface-static">Supported</span>}
+                </span>
+              </button>
             </li>
           ))}
         </ul>
         <p class="compat-note">
-          <strong>*</strong> Apple Terminal has no OSC 8, so runcommand's <code>url</code> port
-          style prints the full <code>http://localhost:PORT</code>, which stays ⌘-clickable there.
-          Konsole, foot, and any other terminal with OSC 8 support work too.
+          <strong>*</strong> Apple Terminal does not support OSC 8. There, the <code>url</code> port style prints
+          {" "}<code>http://localhost:PORT</code> so the terminal can detect the link. Konsole, foot,
+          and other OSC 8 terminals work as well.
         </p>
+
+        <dialog id="surface-preview" class="preview-dialog" closedby="closerequest" aria-labelledby="preview-title" aria-describedby="preview-caption">
+          <div class="preview-panel">
+            <form class="preview-close-form">
+              <button class="preview-close" type="button" data-close-preview aria-label="Close screenshot">×</button>
+            </form>
+            <p class="eyebrow">Screenshot</p>
+            <h3 id="preview-title"></h3>
+            <div class="preview-image-wrap">
+              <img id="preview-image" src={statusbarShot.src} alt="" width="900" height="158" />
+            </div>
+            <p id="preview-caption"></p>
+          </div>
+        </dialog>
       </div>
     </section>
 
@@ -293,19 +330,50 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
             <tbody>
               {commands.map(([cmd, desc]) => (
                 <tr>
-                  <td><code>runcommand {cmd}</code></td>
+                  <td><Code class="syntax-inline" code={`runcommand ${cmd}`} lang="shellscript" themes={codeThemes} transformers={inlineCodeTransformers} inline /></td>
                   <td>{desc}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <p class="lead" style="margin-block-start:1.5rem">
-          Overrides that skip the model entirely: a <code>.claude-run</code> file, or a
-          <code>Run:</code> line in <code>CLAUDE.md</code>. Tunable via env vars like
-          <code>RUNCOMMAND_MODEL</code>, <code>RUNCOMMAND_PORT_STYLE</code>,
-          <code>RUNCOMMAND_COLORS</code>, and <code>NO_COLOR</code>.
-        </p>
+        <div class="config-note">
+          <h3>Project overrides</h3>
+          <p>Overrides take precedence over cached detection and skip the detection agent.</p>
+          <div class="table-wrap override-table">
+            <table>
+              <thead>
+                <tr><th scope="col">Source</th><th scope="col">Format</th><th scope="col">Example</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>.claude-run</code><br /><code>.runcommand</code></td>
+                  <td>One command per line. Add a <code>label:</code> prefix to name multiple services.</td>
+                  <td><Code class="syntax-inline" code="web: pnpm dev" lang="yaml" themes={codeThemes} transformers={inlineCodeTransformers} inline /></td>
+                </tr>
+                <tr>
+                  <td><code>Run:</code> in <code>CLAUDE.md</code></td>
+                  <td>One command, outside fenced code examples.</td>
+                  <td><Code class="syntax-inline" code="Run: docker compose up" lang="yaml" themes={codeThemes} transformers={inlineCodeTransformers} inline /></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3 class="config-env-heading">Environment variables</h3>
+          <div class="table-wrap env-table">
+            <table>
+              <thead>
+                <tr><th scope="col">Variable</th><th scope="col">What it does</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>RUNCOMMAND_MODEL</code></td><td>Selects the detection model. Claude uses <code>haiku</code> by default; other agents keep their own default.</td></tr>
+                <tr><td><code>RUNCOMMAND_PORT_STYLE</code></td><td>Uses <code>url</code> for full localhost URLs or <code>compact</code> for short OSC 8 links such as <code>:5173</code>.</td></tr>
+                <tr><td><code>RUNCOMMAND_COLORS</code></td><td>Sets the comma-separated ANSI colour codes used for multiple services, for example <code>36,33,35</code>.</td></tr>
+                <tr><td><code>NO_COLOR</code></td><td>Removes ANSI colour from all output.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -339,6 +407,63 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
   </script>
 
   <script is:inline>
+    (function () {
+      const dialog = document.getElementById("surface-preview");
+      const image = document.getElementById("preview-image");
+      const title = document.getElementById("preview-title");
+      const caption = document.getElementById("preview-caption");
+      const closeButton = document.querySelector("[data-close-preview]");
+      if (!(dialog instanceof HTMLDialogElement) || !(image instanceof HTMLImageElement) || !title || !caption || !closeButton) return;
+
+      const closeDialog = () => {
+        if (!dialog.open || dialog.classList.contains("is-closing")) return;
+        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          dialog.close();
+          return;
+        }
+
+        dialog.classList.add("is-closing");
+        const finish = () => {
+          if (!dialog.classList.contains("is-closing")) return;
+          dialog.removeEventListener("transitionend", onTransitionEnd);
+          dialog.classList.remove("is-closing");
+          dialog.close();
+        };
+        const onTransitionEnd = (event) => {
+          if (event.target === dialog && event.propertyName === "opacity") finish();
+        };
+        dialog.addEventListener("transitionend", onTransitionEnd);
+        window.setTimeout(finish, 260);
+      };
+
+      document.querySelectorAll("[data-preview-src]").forEach((trigger) => {
+        trigger.addEventListener("click", () => {
+          dialog.classList.remove("is-closing");
+          image.src = trigger.dataset.previewSrc;
+          image.alt = trigger.dataset.previewAlt || "";
+          image.width = Number(trigger.dataset.previewWidth) || 900;
+          image.height = Number(trigger.dataset.previewHeight) || 158;
+          title.textContent = trigger.dataset.previewTitle || "runcommand preview";
+          caption.textContent = trigger.dataset.previewCaption || "";
+          dialog.showModal();
+        });
+      });
+
+      closeButton.addEventListener("click", closeDialog);
+      dialog.addEventListener("cancel", (event) => {
+        event.preventDefault();
+        closeDialog();
+      });
+      dialog.addEventListener("click", (event) => {
+        if (event.target !== dialog) return;
+        const rect = dialog.getBoundingClientRect();
+        const inside = rect.top <= event.clientY && event.clientY <= rect.bottom && rect.left <= event.clientX && event.clientX <= rect.right;
+        if (!inside) closeDialog();
+      });
+    })();
+  </script>
+
+  <script is:inline>
     // Hero widget: loops the /runcommand detection — types, "finds", reveals the
     // command + port, holds, repeats. Only animates while in view; reduced-motion &
     // no-JS just show the final state (which lives in the markup).
@@ -346,8 +471,9 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
       const w = document.getElementById("cc-widget");
       const typed = document.getElementById("cc-typed");
       const cursor = document.getElementById("cc-cursor");
+      const context = document.getElementById("cc-context");
       const run = document.getElementById("cc-run");
-      if (!w || !typed || !run) return;
+      if (!w || !typed || !context || !run) return;
       const CMD = "/runcommand";
       const RESULT = run.innerHTML; // captured final state from the markup
       const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -356,6 +482,7 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
         if (looping) return;
         looping = true;
         while (visible) {
+          context.textContent = "42%";
           typed.textContent = "";
           if (cursor) cursor.hidden = false;
           run.innerHTML = "";
@@ -368,6 +495,7 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
           const t = setInterval(() => { n = (n + 1) % 4; dots.textContent = ".".repeat(n); }, 250);
           await sleep(1450);
           clearInterval(t);
+          context.textContent = "43%";
           run.innerHTML = RESULT;
           run.classList.add("cc-reveal");
           setTimeout(() => run.classList.remove("cc-reveal"), 400);
@@ -424,98 +552,240 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
     }
     .copy:hover { border-color: var(--accent); }
     .install-note { color: var(--muted); font-size: 0.85rem; margin-block-start: 0.7rem; }
-    .hero code, .install-note code, .lead code, .commands code, .compat-note code {
-      font-family: var(--mono); font-size: 0.86em;
+    .hero code, .install-note code, .lead code, .card code, .commands code, .compat-note code, .config-note code {
+      font-family: var(--mono); font-size: 0.86em; color: var(--text);
       background: var(--surface-2); padding: 0.1em 0.4em; border-radius: 5px;
+    }
+    /* The card bodies and the install note are injected with set:html, so Astro's
+       scoping attribute is never applied to their contents and the scoped rule
+       above can't reach them — hence :global, the same reason .command-example
+       needs one. box-decoration-break keeps a wrapped token looking like one pill
+       with rounded ends, not two broken halves. */
+    .card p :global(code), .install-note :global(code) {
+      font-family: var(--mono); font-size: 0.86em; color: var(--text);
+      background: var(--surface-2); padding: 0.1em 0.4em; border-radius: 5px;
+      -webkit-box-decoration-break: clone; box-decoration-break: clone;
     }
 
     /* section headings */
-    .features h2, .how h2, .surfaces h2, .commands h2 { font-size: clamp(1.6rem, 3.5vw, 2.3rem); margin-block: 0.4rem 1.5rem; }
-    .compat-h { font-size: clamp(1.25rem, 2.6vw, 1.6rem); margin-block: 3.2rem 0.4rem; padding-block-start: 2.4rem; border-block-start: 1px solid var(--border); }
+    .features h2, .surfaces h2, .commands h2 { font-size: clamp(1.6rem, 3.5vw, 2.3rem); margin-block: 0.4rem 1.5rem; }
+    .features, .surfaces, .commands { scroll-margin-block-start: 6rem; }
 
     /* features */
-    .cards { list-style: none; padding: 0; display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
-    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.3rem; }
+    .cards {
+      list-style: none; padding: 0; display: grid; gap: 1rem;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+    }
+    .card {
+      min-inline-size: 0; display: grid; grid-template-rows: auto auto 1fr auto;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.3rem;
+    }
     .card-icon { color: var(--accent); font-size: 1.4rem; }
     .card h3 { font-size: 1.05rem; margin-block: 0.6rem 0.35rem; }
-    .card p { color: var(--muted); font-size: 0.95rem; }
-
-    /* how */
-    .how { background: var(--surface); border-block: 1px solid var(--border); }
-    .flow { list-style: none; padding: 0; margin-block: 2rem; display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-    .step { position: relative; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.3rem; }
-    .step-n {
-      display: grid; place-content: center; inline-size: 2rem; block-size: 2rem;
-      border-radius: 50%; background: var(--accent); color: var(--accent-ink);
-      font-weight: 700; font-family: var(--mono); margin-block-end: 0.7rem;
+    .card p { min-inline-size: 0; color: var(--muted); font-size: 0.95rem; }
+    .card-visual {
+      inline-size: 100%; min-inline-size: 0; aspect-ratio: 4 / 3;
+      margin-block-start: 1rem; align-self: end;
     }
-    .step h3 { font-size: 1.05rem; margin-block-end: 0.3rem; }
-    .step p { color: var(--muted); font-size: 0.93rem; }
-    .how-demos { display: grid; gap: 1.2rem; margin-block-start: 2rem; }
-    @media (min-width: 780px) { .how-demos { grid-template-columns: 1.3fr 1fr; align-items: start; } }
-
-    /* surfaces */
-    .surface-grid { display: grid; gap: 1.3rem; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); margin-block-start: 1.5rem; }
-
-    /* Surfaces are drawn in each host's own chrome (fixed dark, like a screenshot). */
-    .sfc-fig { margin: 0; display: grid; gap: 0.6rem; grid-template-rows: 1fr auto; }
-    .sfc {
-      container-type: inline-size;
-      display: flex; flex-direction: column; block-size: 100%;
-      background: #0d1117; border: 1px solid #30363d; border-radius: 12px;
-      overflow: hidden; box-shadow: 0 18px 50px -24px rgb(0 0 0 / 0.65); color: #c9d1d9;
+    .feature-demo {
+      display: flex; flex-direction: column; justify-content: space-between; gap: 0.8rem;
+      overflow: clip; padding: 0.9rem; border: 1px solid var(--border);
+      border-radius: 9px; background: var(--bg); font: 0.72rem/1.4 var(--mono);
     }
-    .sfc-tt { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.8rem; background: #161b22; border-block-end: 1px solid #30363d; }
-    .sfc-dots { display: inline-flex; gap: 6px; }
-    .sfc-dots i { inline-size: 11px; block-size: 11px; border-radius: 50%; }
-    .sfc-dots i:nth-child(1) { background: #ff5f57; } .sfc-dots i:nth-child(2) { background: #febc2e; } .sfc-dots i:nth-child(3) { background: #28c840; }
-    .sfc-ttl { color: #8b949e; font-size: 0.78rem; font-family: var(--mono); }
-    .sfc-body { flex: 1; padding: 0.9rem 1rem; font-family: var(--mono); font-size: clamp(0.74rem, 2.5cqi, 0.9rem); line-height: 1.75; }
-    .sfc-body .ln { display: block; }
-    .sfc-body .row { display: flex; justify-content: space-between; gap: 2ch; flex-wrap: wrap; }
-    .sfc-ind { padding-inline-start: 1.1rem; }
-    .sfc-body a { color: #56d4dd; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
-    .sfc-body a:hover { text-decoration-style: solid; }
-    /* shared token colours */
-    .c-dim { color: #6e7681; } .c-cmd { color: #56d4dd; } .c-magenta { color: #d2a8ff; }
-    .c-green { color: #7ee787; } .c-dir { color: #79c0ff; } .c-git { color: #d2a8ff; }
-    .c-ok { color: #7ee787; } .c-path { color: #79c0ff; } .c-claude { color: #d97757; }
-    /* Claude Code: the bordered prompt box */
-    .sfc-cc-prompt { margin-block: 0.55rem; padding: 0.4rem 0.6rem; border: 1px solid #30363d; border-radius: 6px; color: #e6e6ea; }
-    /* OpenCode: session pill + host-owned bottom bar */
-    .oc-badge { background: #2a2a31; color: #c8c8d0; padding: 0.05rem 0.4rem; border-radius: 3px; margin-inline-end: 0.4rem; }
-    .oc-bar {
-      display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.2rem 1rem;
-      padding: 0.55rem 1rem; background: #1d1d22; border-block-start: 1px solid #2a2a31;
-      font-family: var(--mono); font-size: clamp(0.72rem, 2.4cqi, 0.86rem);
+    .feature-demo code { min-inline-size: 0; padding: 0; background: none; color: inherit; font: inherit; }
+    .visual-kicker {
+      overflow: hidden; color: var(--muted); font-size: 0.65rem;
+      letter-spacing: 0.05em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap;
     }
-    .oc-bar a { color: #56d4dd; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
-    /* tmux: the iconic green status bar */
-    .tmux-bar {
-      display: flex; align-items: center; gap: 0.6rem;
-      padding: 0.28rem 0.6rem; background: #4e9a06; color: #08260a;
-      font-family: var(--mono); font-size: clamp(0.72rem, 2.4cqi, 0.86rem); font-weight: 600;
+    .visual-chip-row { display: flex; flex-wrap: wrap; gap: 0.45rem; align-content: center; }
+    .visual-chip {
+      max-inline-size: 100%; overflow: hidden; padding: 0.3rem 0.45rem;
+      border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2);
+      color: var(--muted); text-overflow: ellipsis; white-space: nowrap;
     }
-    .tmux-sess { background: #08260a; color: #a6e3a1; padding: 0.05rem 0.5rem; border-radius: 2px; }
-    .tmux-right { margin-inline-start: auto; }
+    .visual-result {
+      min-inline-size: 0; display: flex; align-items: center; gap: 0.4rem;
+      padding: 0.55rem 0.65rem; border-radius: 7px; background: var(--surface-2); color: var(--text);
+    }
+    .visual-result > span { color: var(--accent); }
+    .visual-result code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    :global(.cache-example) {
+      max-inline-size: 100%; overflow: auto; overscroll-behavior: contain;
+      padding: 0.7rem; scrollbar-gutter: stable;
+      border: 1px solid var(--border); border-radius: 8px; background: var(--bg);
+      color: var(--text); font: 0.64rem/1.42 var(--mono); white-space: pre;
+    }
+    :global(.cache-example code) { padding: 0; background: none; font: inherit; }
+    :global(.cache-example .line:first-child) {
+      white-space: pre-wrap; overflow-wrap: anywhere;
+    }
+    :global(.command-example) {
+      display: inline-flex; align-items: center; gap: 0.24em;
+      vertical-align: -0.16em; white-space: nowrap; max-inline-size: 100%;
+    }
+    :global(.command-example code) {
+      min-inline-size: 0; overflow: hidden; text-overflow: ellipsis;
+      font-family: var(--mono); font-size: 0.86em; color: var(--text);
+      background: var(--surface-2); padding: 0.1em 0.4em; border-radius: 5px;
+    }
+    :global(.command-logo) { inline-size: 1em; block-size: 1em; flex: none; }
+    .refresh-row {
+      min-inline-size: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center; gap: 0.5rem; color: var(--muted);
+    }
+    .refresh-row:nth-of-type(3) { grid-template-columns: auto minmax(0, 1fr); color: var(--text); }
+    .refresh-row code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .refresh-mark {
+      display: grid; place-content: center; inline-size: 1.35rem; block-size: 1.35rem;
+      border-radius: 50%; background: var(--surface-2); color: var(--accent);
+    }
+    .refresh-mark.is-change { color: #e3b341; }
+    .refresh-mark.is-done { color: #7ee787; }
+    .visual-port-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .visual-port-row span {
+      display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.35rem 0.5rem;
+      border: 1px solid color-mix(in oklab, var(--accent) 35%, var(--border));
+      border-radius: 999px; color: var(--accent);
+    }
+    .visual-port-row i { inline-size: 0.4rem; block-size: 0.4rem; border-radius: 50%; background: #7ee787; }
+    .feature-hosts { justify-content: flex-start; gap: 0.5rem; }
+    /* The command column is what carries the point, so it stays right-aligned and
+       identical down the stack — the repetition is the argument. */
+    .host-row {
+      min-inline-size: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center; gap: 0.55rem; padding: 0.5rem 0.6rem;
+      border: 1px solid var(--border); border-radius: 7px; background: var(--surface-2);
+    }
+    .host-icon, .host-mark { inline-size: 1.1rem; block-size: 1.1rem; flex: none; }
+    .host-icon { border-radius: 4px; object-fit: contain; }
+    .host-mark {
+      display: grid; place-items: center; border: 1px solid var(--border);
+      border-radius: 4px; background: var(--surface); font-size: 0.5rem; font-weight: 700;
+    }
+    .host-name { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+    .host-row code { color: var(--accent); white-space: nowrap; }
+    .feature-tool-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .feature-services { justify-content: flex-start; }
+    .service-row {
+      min-inline-size: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center; gap: 0.55rem; padding: 0.6rem;
+      border: 1px solid var(--border); border-radius: 7px; background: var(--surface-2);
+    }
+    .service-row code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .service-label { font-weight: 700; }
+    .service-label.is-web, .service-port { color: #56d4dd; }
+    .service-label.is-api { color: #d2a8ff; }
 
-    /* compatibility (merged into surfaces) */
-    .logos { list-style: none; padding: 0; margin-block: 1.6rem; display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); }
-    .logo-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); transition: border-color 0.14s ease; }
-    .logo-item a { display: flex; flex-direction: column; align-items: center; gap: 0.65rem; padding: 1.3rem 0.5rem; text-decoration: none; color: inherit; border-radius: inherit; }
-    .logo-item:hover { border-color: color-mix(in oklab, var(--accent) 40%, var(--border)); }
-    .logo-item a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-    .logo-item .ico {
-      inline-size: 30px; block-size: 30px; display: block;
-      background-color: var(--muted);
+    /* integrations */
+    .surface-list {
+      list-style: none; padding: 0; margin-block: 1.8rem 1.2rem;
+      display: grid; gap: 0.75rem;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    }
+    @media (min-width: 360px) and (max-width: 620px) {
+      .surface-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .surface-trigger { padding: 0.85rem; }
+      .surface-ident { gap: 0.55rem; }
+    }
+    .surface-item { min-inline-size: 0; }
+    .surface-trigger {
+      inline-size: 100%; block-size: 100%; min-block-size: 124px;
+      display: flex; flex-direction: column; justify-content: space-between; gap: 1rem;
+      padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--surface); color: var(--text); font: inherit; text-align: start;
+      transition: border-color 0.14s ease, transform 0.14s ease, background-color 0.14s ease;
+    }
+    .surface-trigger:not(:disabled) { cursor: pointer; }
+    @media (hover: hover) and (pointer: fine) {
+      .surface-trigger:not(:disabled):hover {
+        border-color: color-mix(in oklab, var(--accent) 55%, var(--border));
+        background: color-mix(in oklab, var(--surface) 92%, var(--accent));
+        transform: translateY(-1px);
+      }
+    }
+    .surface-trigger:disabled { opacity: 1; cursor: default; }
+    .surface-ident { display: flex; align-items: center; gap: 0.75rem; min-inline-size: 0; }
+    .surface-ident > span:last-child { min-inline-size: 0; }
+    .surface-icon-img, .surface-logo, .surface-mark {
+      inline-size: 28px; block-size: 28px; flex: none;
+    }
+    .surface-icon-img { border-radius: 6px; object-fit: contain; }
+    .surface-logo {
+      display: block; background-color: var(--brand);
       -webkit-mask: var(--logo) center / contain no-repeat;
       mask: var(--logo) center / contain no-repeat;
-      transition: background-color 0.14s ease;
     }
-    .logo-item:hover .ico { background-color: var(--brand); }
-    .logo-item span { color: var(--muted); font-size: 0.82rem; text-align: center; }
-    .compat-note { color: var(--muted); font-size: 0.92rem; max-inline-size: 72ch; }
+    .surface-mark {
+      display: grid; place-content: center; border-radius: 7px;
+      background: var(--surface-2); border: 1px solid var(--border);
+      color: var(--muted); font: 700 0.68rem/1 var(--mono); text-transform: uppercase;
+    }
+    .surface-name, .surface-detail { display: block; }
+    .surface-name { overflow: hidden; font-weight: 650; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+    .surface-detail { color: var(--muted); font-size: 0.8rem; margin-block-start: 0.1rem; }
+    .surface-meta { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+    .surface-kind, .surface-static { font: 600 0.68rem/1.2 var(--mono); }
+    .surface-kind { color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .surface-static { color: var(--muted); font-weight: 500; }
+    .compat-note { color: var(--muted); font-size: 0.92rem; max-inline-size: 76ch; }
     .compat-note strong { color: var(--text); }
+
+    /* screenshot dialog */
+    .preview-dialog {
+      inline-size: min(calc(100% - 2rem), 980px); max-inline-size: none;
+      max-block-size: calc(100dvb - 2rem); margin: auto; padding: 0;
+      border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--surface); color: var(--text); overflow: auto;
+      box-shadow: 0 30px 90px rgb(0 0 0 / 0.35);
+      opacity: 0; transform: translateY(6px) scale(0.985);
+      transition:
+        opacity 220ms cubic-bezier(0.165, 0.84, 0.44, 1),
+        transform 220ms cubic-bezier(0.165, 0.84, 0.44, 1),
+        display 220ms allow-discrete,
+        overlay 220ms allow-discrete;
+      transition-behavior: allow-discrete;
+    }
+    .preview-dialog[open] { opacity: 1; transform: none; }
+    .preview-dialog.is-closing { opacity: 0; transform: translateY(6px) scale(0.985); }
+    @starting-style {
+      .preview-dialog[open] { opacity: 0; transform: translateY(6px) scale(0.985); }
+    }
+    .preview-dialog::backdrop {
+      background-color: rgb(4 8 12 / 0); backdrop-filter: blur(4px);
+      transition:
+        background-color 220ms cubic-bezier(0.165, 0.84, 0.44, 1),
+        display 220ms allow-discrete,
+        overlay 220ms allow-discrete;
+      transition-behavior: allow-discrete;
+    }
+    .preview-dialog[open]::backdrop { background-color: rgb(4 8 12 / 0.72); }
+    .preview-dialog.is-closing::backdrop { background-color: rgb(4 8 12 / 0); }
+    @starting-style {
+      .preview-dialog[open]::backdrop { background-color: rgb(4 8 12 / 0); }
+    }
+    .preview-panel { position: relative; padding: clamp(1rem, 4vw, 2rem); }
+    .preview-panel h3 { font-size: clamp(1.25rem, 3vw, 1.75rem); margin-block: 0.25rem 1.25rem; }
+    .preview-close-form { position: absolute; inset-block-start: 0.8rem; inset-inline-end: 0.8rem; }
+    .preview-close {
+      display: grid; place-content: center; inline-size: 2.25rem; block-size: 2.25rem;
+      border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2);
+      color: var(--text); font: 500 1.35rem/1 var(--font); cursor: pointer;
+    }
+    .preview-close:hover { border-color: var(--accent); }
+    .preview-image-wrap {
+      border: 1px solid #30363d; border-radius: 12px; overflow: hidden;
+      background: #0d1117; box-shadow: 0 18px 50px -24px rgb(0 0 0 / 0.65);
+    }
+    .preview-image-wrap img { inline-size: 100%; block-size: auto; }
+    #preview-caption { color: var(--muted); font-size: 0.92rem; margin-block-start: 1rem; max-inline-size: 72ch; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .surface-trigger, .preview-dialog, .preview-dialog::backdrop {
+        transition: none;
+      }
+      .preview-dialog, .preview-dialog[open] { transform: none; }
+    }
 
     /* commands */
     .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
@@ -523,7 +793,29 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
     th, td { text-align: start; padding: 0.8rem 1rem; border-block-end: 1px solid var(--border); vertical-align: top; }
     thead th { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
     tbody tr:last-child td { border-block-end: 0; }
-    td code { font-family: var(--mono); font-size: 0.88rem; color: var(--accent); white-space: nowrap; }
+    td code, :global(.syntax-inline) { font-family: var(--mono); font-size: 0.88rem; white-space: nowrap; }
+    td code { color: var(--accent); }
+    :global(.syntax-inline) {
+      display: inline-block; padding: 0.1em 0.4em; border-radius: 5px;
+      background: var(--surface-2);
+    }
+    @media (prefers-color-scheme: dark) {
+      :global(.astro-code), :global(.astro-code span) {
+        color: var(--shiki-dark) !important;
+        background-color: var(--shiki-dark-bg) !important;
+        font-style: var(--shiki-dark-font-style) !important;
+        font-weight: var(--shiki-dark-font-weight) !important;
+        text-decoration: var(--shiki-dark-text-decoration) !important;
+      }
+    }
+    .config-note { margin-block-start: 2rem; }
+    .config-note h3 { font-size: 1.05rem; margin-block-end: 0.45rem; }
+    .config-note > p { color: var(--muted); font-size: 0.94rem; max-inline-size: 78ch; }
+    .override-table { margin-block-start: 1rem; }
+    .override-table td:nth-child(2) { min-inline-size: 17rem; }
+    .config-env-heading { margin-block-start: 2rem; }
+    .env-table { margin-block: 1rem; }
+    .env-table td:first-child { inline-size: 30%; }
 
     /* footer */
     .foot { border-block-start: 1px solid var(--border); background: var(--surface); }

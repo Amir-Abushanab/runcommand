@@ -16,8 +16,10 @@ OpenTUI `<a href>` links, so they're clickable with your terminal's modifier
 
 ## Install
 
-The plugin needs OpenCode's own runtime deps (`solid-js`, `@opentui/solid`)
-resolvable from here. Two ways:
+The plugin needs `solid-js` and `@opentui/solid` resolvable from here. They're
+declared as **peer** dependencies on purpose: a second copy of `solid-js` is a
+second reactive graph, and a second `@opentui/solid` is a second renderer, so a
+shared copy is the one that works.
 
 ```sh
 cd integrations/opencode
@@ -45,11 +47,22 @@ plugins):
 
 Restart the OpenCode TUI.
 
+### Finding the CLI
+
+The plugin shells out to `runcommand`, and looks for it in two places: the
+sibling checkout (`../../bin/runcommand.mjs`) when this directory lives inside the
+repo, and otherwise plain `runcommand` on your `PATH`. So a clone works with no
+setup, and a standalone install works as long as the CLI is installed too.
+`RUNCOMMAND_CMD` overrides both.
+
+This package is publishable (`runcommand-opencode`) but **not yet published** — for
+now, install from a checkout.
+
 ## Config (env)
 
 | Var | Default | Purpose |
 | --- | --- | --- |
-| `RUNCOMMAND_CMD` | (auto) | Override how the CLI is invoked, e.g. `runcommand` if linked globally. Defaults to running `../../bin/runcommand.mjs` with the current runtime. |
+| `RUNCOMMAND_CMD` | (auto) | Override how the CLI is invoked. Default: `../../bin/runcommand.mjs` under the current runtime when that sibling exists, else `runcommand` from `PATH`. |
 | `RUNCOMMAND_OPENCODE_REFRESH_MS` | `5000` | How often the line re-reads state. |
 
 Everything else (model, overrides, port filtering) is controlled by the CLI — see

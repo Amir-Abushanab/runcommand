@@ -8,15 +8,17 @@
  * (⌘-click / ctrl-click, the terminal's own modifier).
  *
  * No detection logic lives here. It shells out to `runcommand json` for the parts,
- * so caching, scoping, filtering and LLM detection all stay in the one CLI. The
- * CLI is resolved relative to this file, so the plugin is self-contained.
+ * so caching, scoping, filtering and LLM detection all stay in the one CLI.
  *
- * Register it by adding this directory to `~/.config/opencode/tui.json`:
+ * Register it in `~/.config/opencode/tui.json` — either the package, if installed
+ * from npm, or this directory from a checkout:
+ *   { "plugin": ["runcommand-opencode"] }
  *   { "plugin": ["/absolute/path/to/runcommand/integrations/opencode"] }
  */
 import type { TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui";
 import type { JSX } from "@opentui/solid";
 import { createRoot, createSignal, onCleanup } from "solid-js";
+import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -33,12 +35,16 @@ interface RunData {
   readonly detecting: boolean;
 }
 
-/** The runcommand CLI, resolved relative to this file (…/bin/runcommand.mjs). */
+/** The runcommand CLI: the sibling checkout if there is one, else whatever is on PATH. */
 function runcommandCmd(): readonly string[] {
   const override = process.env["RUNCOMMAND_CMD"];
   if (override !== undefined && override.length > 0) return override.split(" ");
+  // In a checkout the CLI sits two levels up. Installed from npm it does not —
+  // there is no sibling bin/ — and without this check the spawn simply fails and
+  // the slot renders empty, with nothing on screen to explain why.
   const mjs = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "bin", "runcommand.mjs");
-  return [process.execPath, mjs];
+  if (existsSync(mjs)) return [process.execPath, mjs];
+  return ["runcommand"];
 }
 
 /** Ask the CLI for the parts. Any failure returns null → the slot renders nothing. */

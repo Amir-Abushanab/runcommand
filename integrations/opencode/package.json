@@ -1,15 +1,20 @@
 {
-  "name": "runcommand-opencode-plugin",
+  "name": "runcommand-opencode",
   "version": "0.1.0",
-  "private": true,
   "description": "OpenCode TUI plugin: shows the project's run command + clickable live localhost ports (powered by runcommand).",
   "type": "module",
   "exports": {
     "./tui": "./tui.tsx"
   },
+  "files": [
+    "tui.tsx",
+    "tsconfig.json"
+  ],
   "peerDependencies": {
-    "@opencode-ai/plugin": "1.18.10",
-    "@opentui/solid": "0.4.5",
-    "solid-js": "1.9.14"
+    "@opentui/solid": "^0.4.5",
+    "solid-js": "^1.9.14"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "^1.18.10"
   }
 }
