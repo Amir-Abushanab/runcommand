@@ -19,11 +19,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: withastro/action@v3
+      - uses: actions/checkout@v7
+      - uses: withastro/action@v6
         with:
           path: site
-          # pnpm@11 needs Node >= 22.13; the action defaults to Node 20.
+          # Pinned to match ci.yml. The action defaults to 24, which also satisfies
+          # pnpm@11 (needs >= 22.13) — this is about building the site on one known version.
           node-version: 22
           # pnpm version comes from site/package.json's "packageManager" field.
           # Don't also set package-manager here — the two conflict and fail the build.
@@ -36,4 +37,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
