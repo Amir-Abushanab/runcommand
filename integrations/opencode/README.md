@@ -39,7 +39,16 @@ install resolves them:
 
 ```sh
 bun install            # in the plugin directory
+bun run build          # bundles tui.tsx -> dist/tui.js
 ```
+
+**The build is required, not optional.** `dist/` is what `exports` points at, and it
+isn't committed. It also isn't just a compile step: the bundle is produced with
+`--conditions=browser`, which pins `solid-js` to its **client** build. Loaded from source,
+`solid-js` resolves through the `node` condition to `dist/server.js` — Solid's
+server-rendering build, whose effects never run. The plugin then loads, registers its
+slot, renders once with no data, and never updates again: an empty footer with no error
+anywhere. `@opentui/core` stays external, since the host owns the renderer.
 
 Then register it in `~/.config/opencode/tui.json` (append — don't remove other
 plugins):

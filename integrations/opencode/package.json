@@ -18,17 +18,21 @@
   },
   "type": "module",
   "exports": {
-    "./tui": "./tui.tsx"
+    "./tui": "./dist/tui.js"
   },
   "files": [
-    "tui.tsx",
-    "tsconfig.json"
+    "dist"
   ],
   "peerDependencies": {
+    "@opentui/core": ">=0.4.5",
     "@opentui/solid": ">=0.4.5",
     "solid-js": "^1.9.12"
   },
   "devDependencies": {
     "@opencode-ai/plugin": "^1.18.10"
+  },
+  "scripts": {
+    "build": "bun build tui.tsx --target=bun --conditions=browser --external @opentui/core --external @opencode-ai/plugin --outfile=dist/tui.js",
+    "prepublishOnly": "bun run build"
   }
 }
