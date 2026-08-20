@@ -901,9 +901,11 @@ const JSON_HARNESSES = [
     key: "qwen", label: "Qwen Code",
     file: path.join(os.homedir(), ".qwen", "settings.json"),
     installed: () => exists(path.join(os.homedir(), ".qwen")) || !!findBin("qwen"),
-    // Qwen is reported to strip OSC 8 (not independently verified here); url keeps the
-    // ports clickable either way, since terminals auto-link visible URL text.
-    envPrefix: "RUNCOMMAND_PORT_STYLE=url ",
+    // Qwen passes OSC 8 straight through — measured by capturing what its TUI writes to
+    // an attached pty: the full hyperlink arrives intact. It used to be wired with
+    // RUNCOMMAND_PORT_STYLE=url on the assumption that it stripped them; it doesn't, so
+    // it gets the compact default like every other passthrough surface.
+    envPrefix: "",
     get: (j) => j.ui && j.ui.statusLine && j.ui.statusLine.command,
     set: (j, cmd) => { j.ui = j.ui || {}; j.ui.statusLine = Object.assign({}, j.ui.statusLine, { type: "command", command: cmd }); },
     del: (j) => { if (j.ui) delete j.ui.statusLine; },

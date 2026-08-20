@@ -89,6 +89,15 @@ const terminals = [
   { slug: "apple", name: "Apple Terminal", color: "var(--text)", osc8: false },
 ];
 
+// Install command per package manager. pnpm leads because that's what this project
+// uses; the rest are here so nobody has to translate the flags themselves.
+const packageManagers = [
+  { id: "pnpm", label: "pnpm", cmd: "pnpm add -g @amabush/runcommand" },
+  { id: "npm", label: "npm", cmd: "npm i -g @amabush/runcommand" },
+  { id: "yarn", label: "yarn", cmd: "yarn global add @amabush/runcommand" },
+  { id: "bun", label: "bun", cmd: "bun add -g @amabush/runcommand" },
+];
+
 const installNote = `<code>init</code> finds supported tools, updates their config, and backs up changed files. It needs Node and one supported AI CLI for detection. <a href="${repo}" rel="noopener">Read the setup guide &rarr;</a>`;
 
 const surfaceTools = [
@@ -104,6 +113,9 @@ const surfaceTools = [
   },
   { category: "Tool", name: "tmux", suffix: "", detail: "Status bar", icon: null, logo: null, color: null, mark: "tm", preview: null },
   { category: "Tool", name: "zellij", suffix: "", detail: "Status bar", icon: null, logo: null, color: null, mark: "zj", preview: null },
+  // Listed last in the tools group because it's the odd one out: every entry above
+  // renders the line, this one works the command out in the first place.
+  { category: "Tool", name: "DeepSeek Harness", suffix: "", detail: "Detection agent", icon: null, logo: "deepseek", color: "#4D6BFE", mark: null, preview: null },
 ];
 
 const surfaceItems = [
@@ -170,7 +182,20 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
             </a>
           </div>
           <div class="install">
-            <code id="install-cmd">npm i -g @amabush/runcommand &amp;&amp; runcommand init</code>
+            <label class="sr-only" for="pm-select">Package manager</label>
+            <select id="pm-select" class="pm-select">
+              <!-- Only rendered where `appearance: base-select` is supported. Other
+                   browsers drop it at parse time and show a plain native select,
+                   which is the intended fallback. -->
+              <button type="button"><selectedcontent></selectedcontent></button>
+              {packageManagers.map((pm) => (
+                <option value={pm.id} selected={pm.id === "pnpm"} data-cmd={`${pm.cmd} && runcommand init`}>
+                  <svg class="pm-logo" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><use href={`${base}/logos/command-logos.svg#${pm.id}`}></use></svg>
+                  <span>{pm.label}</span>
+                </option>
+              ))}
+            </select>
+            <code id="install-cmd">pnpm add -g @amabush/runcommand &amp;&amp; runcommand init</code>
             <button class="copy" type="button" data-copy-target="install-cmd" aria-label="Copy command">Copy</button>
           </div>
           <p class="install-note" set:html={installNote}></p>
@@ -261,7 +286,13 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
       <div class="wrap">
         <p class="eyebrow">Integrations</p>
         <h2>Status lines, prompts, and terminal links.</h2>
-        <p class="lead">runcommand writes the cached command to each tool's available UI. Ports use OSC 8 links where the terminal supports them. Click a terminal or tool to open its screenshot when one is available.</p>
+        <p class="lead">runcommand writes the cached command to each tool's available UI, and leans on whichever AI CLI you already have to work that command out in the first place. Ports use <span class="hint-wrap"><a
+          class="hint"
+          href="https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda"
+          target="_blank"
+          rel="noopener"
+          aria-describedby="osc8-hint"
+        >OSC 8 links</a><span class="hint-bubble" id="osc8-hint" role="tooltip">An escape sequence that makes terminal text a real hyperlink, so a short <code>:5173</code> is clickable without printing the whole URL. Not every terminal supports it — those get the full address instead. Opens the reference ↗</span></span> where the terminal supports them. Click a terminal or tool to open its screenshot when one is available.</p>
 
         <ul class="surface-list" role="list">
           {surfaceItems.map((item) => (
@@ -407,6 +438,45 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
   </script>
 
   <script is:inline>
+    // Package-manager picker: swap the shown command, remember the choice. The copy
+    // button reads textContent, so it follows along with no extra wiring.
+    (function () {
+      const select = document.getElementById("pm-select");
+      const out = document.getElementById("install-cmd");
+      if (!select || !out) return;
+      const KEY = "runcommand:pm";
+      const apply = () => {
+        const opt = select.selectedOptions[0];
+        if (opt && opt.dataset.cmd) out.textContent = opt.dataset.cmd;
+      };
+      try {
+        const saved = localStorage.getItem(KEY);
+        if (saved && [...select.options].some((o) => o.value === saved)) select.value = saved;
+      } catch {}
+      apply();
+      select.addEventListener("change", () => {
+        apply();
+        try { localStorage.setItem(KEY, select.value); } catch {}
+      });
+    })();
+
+    // Escape closes an open hint without moving the pointer or focus, which the
+    // CSS-only version can't do on its own. Cleared on leave so it reopens later.
+    (function () {
+      const wraps = document.querySelectorAll(".hint-wrap");
+      if (!wraps.length) return;
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") wraps.forEach((w) => w.setAttribute("data-hint-dismissed", ""));
+      });
+      wraps.forEach((wrap) => {
+        const clear = () => wrap.removeAttribute("data-hint-dismissed");
+        wrap.addEventListener("pointerleave", clear);
+        wrap.addEventListener("focusout", clear);
+      });
+    })();
+  </script>
+
+  <script is:inline>
     (function () {
       const dialog = document.getElementById("surface-preview");
       const image = document.getElementById("preview-image");
@@ -544,6 +614,78 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
       max-inline-size: 100%;
     }
     .install code { font-family: var(--mono); font-size: 0.85rem; color: var(--text); overflow-x: auto; white-space: nowrap; min-inline-size: 0; }
+    .sr-only {
+      position: absolute; inline-size: 1px; block-size: 1px; padding: 0; margin: -1px;
+      overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+    }
+    /* Package-manager picker. Where `appearance: base-select` is supported each option
+       carries its brand mark; where it isn't, this is a plain native select showing the
+       labels — the icons are the enhancement, the choice always works. */
+    .pm-select {
+      flex: none; font: 600 0.8rem/1 var(--font); color: var(--text); cursor: pointer;
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 7px; padding: 0.42rem 0.5rem;
+    }
+    .pm-logo { inline-size: 1em; block-size: 1em; flex: none; }
+    @supports (appearance: base-select) {
+      .pm-select, .pm-select::picker(select) { appearance: base-select; }
+      .pm-select { display: inline-flex; align-items: center; gap: 0.3rem; }
+      /* base-select puts the trigger in a nested <button> and clones the chosen
+         option into <selectedcontent>; both need to be flex rows or the mark stacks
+         above its label. */
+      .pm-select button {
+        display: flex; align-items: center; gap: 0.4rem;
+        padding: 0; border: 0; background: none; color: inherit; font: inherit;
+      }
+      .pm-select selectedcontent { display: flex; align-items: center; gap: 0.4rem; white-space: nowrap; }
+      .pm-select selectedcontent .pm-logo { inline-size: 1.15em; block-size: 1.15em; }
+      /* The command sits immediately to the right and already begins with the
+         manager's name, so the trigger carries the mark alone. The label stays in the
+         open list, in the accessible name, and in the fallback native select — where
+         there is no command text to lean on. */
+      .pm-select selectedcontent span { display: none; }
+      .pm-select { padding-inline: 0.5rem 0.4rem; }
+      .pm-select::picker-icon { color: var(--muted); transition: rotate 0.15s ease; }
+      .pm-select:open::picker-icon { rotate: 180deg; }
+      .pm-select option {
+        display: flex; align-items: center; gap: 0.5rem;
+        padding: 0.4rem 0.6rem; border-radius: 6px;
+      }
+      .pm-select option:checked { background: var(--surface-2); }
+      .pm-select::picker(select) {
+        margin-block-start: 0.3rem; padding: 0.25rem; border-radius: 9px;
+        background: var(--surface); border: 1px solid var(--border);
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .pm-select::picker-icon { transition: none; }
+    }
+    /* Inline hint. Deliberately not popover/interestfor: interest invokers are
+       Chrome-only and need a polyfill, which is more machinery than one decorative
+       hint on a static page is worth. Hover covers pointers, :focus-visible covers
+       keyboards, the bubble sits inside the hover target so it stays readable while
+       the pointer travels onto it, and Escape dismisses it (WCAG 1.4.13). */
+    /* z-index here (not just on the bubble) so the wrap owns a stacking context and
+       the bubble can't be painted over by later siblings such as the section heading. */
+    .hint-wrap { position: relative; z-index: 10; white-space: nowrap; }
+    .hint {
+      color: inherit; cursor: help;
+      text-decoration: underline dotted currentColor; text-underline-offset: 0.25em;
+    }
+    .hint-bubble {
+      /* Opens downward: the lead sits directly under a large heading, and upward would
+         cover it. Below the paragraph there is only whitespace before the tool grid. */
+      position: absolute; inset-block-start: calc(100% + 0.5rem); inset-inline-start: 0;
+      inline-size: max-content; max-inline-size: min(34ch, 78vw);
+      padding: 0.6rem 0.7rem; border-radius: 9px; white-space: normal;
+      background: var(--surface-2); border: 1px solid var(--border);
+      color: var(--text); font-size: 0.82rem; line-height: 1.45; text-align: start;
+      opacity: 0; visibility: hidden; transition: opacity 0.12s, visibility 0.12s;
+    }
+    .hint-wrap:hover .hint-bubble, .hint:focus-visible + .hint-bubble { opacity: 1; visibility: visible; }
+    .hint-wrap[data-hint-dismissed] .hint-bubble { opacity: 0; visibility: hidden; }
+    @media (prefers-reduced-motion: reduce) { .hint-bubble { transition: none; } }
+
     .copy {
       margin-inline-start: auto; flex: none;
       font: 600 0.8rem/1 var(--font); cursor: pointer;

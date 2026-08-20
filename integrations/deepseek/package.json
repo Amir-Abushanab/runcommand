@@ -1,0 +1,35 @@
+{
+  "name": "runcommand-dsh",
+  "version": "0.1.0",
+  "description": "DeepSeek Harness plugin: the project's run command + clickable live localhost ports as an ambient row under the composer (powered by runcommand).",
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ],
+      "platform": "web"
+    }
+  },
+  "keywords": [
+    "deepseek",
+    "dsh",
+    "cordis",
+    "runcommand",
+    "status-line"
+  ],
+  "license": "MIT"
+}

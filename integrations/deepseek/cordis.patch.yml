@@ -1,0 +1,6 @@
+# The runcommand bundle patch: one row. The browser half is not a row of its own —
+# dsh scans enabled entries for `dsh.client` packages and ships their
+# `exports["./client"]` to the page itself.
+- insert:
+    - id: runcommand
+      name: runcommand-dsh

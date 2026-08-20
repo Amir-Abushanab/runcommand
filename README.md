@@ -202,7 +202,7 @@ guess:
 | Claude Code status line | passes through | `compact` | [documented](https://code.claude.com/docs/en/statusline#clickable-links) — OSC 8 links are a supported status-line feature |
 | starship / Oh My Posh | passes through | `compact` | by construction: your terminal draws the prompt, so only its support matters |
 | **tmux** status bar | **stripped** | **`url`** | measured — tmux stores the escape verbatim, then emits none of it to the client |
-| Qwen Code | reported stripped | `url` | not independently verified; `init` sets `RUNCOMMAND_PORT_STYLE=url` for it anyway |
+| Qwen Code | passes through | `compact` | measured — its TUI writes the full hyperlink to the terminal intact |
 | Zellij (zjstatus) | unverified | `url` | assume tmux-like until someone measures it |
 | OpenCode footer | n/a | n/a | the plugin reads `--json` and builds its own links via OpenTUI |
 
@@ -238,12 +238,12 @@ inside `($output )` is load-bearing — starship trims a module's output, so wit
 next segment renders as `:4321took 10s`.
 
 **Qwen Code** — it copied Claude Code's `statusLine` contract, so it drops straight into
-`~/.qwen/settings.json` (Qwen strips OSC 8, so `url` ports stay clickable):
+`~/.qwen/settings.json`:
 
 ```json
 { "ui": { "statusLine": {
   "type": "command",
-  "command": "RUNCOMMAND_PORT_STYLE=url runcommand statusline"
+  "command": "runcommand statusline"
 } } }
 ```
 
