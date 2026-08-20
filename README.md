@@ -111,6 +111,7 @@ clean "no run command" answer does not.
 | `gemini` | `gemini -p "<prompt>"` | [Gemini CLI](https://github.com/google-gemini/gemini-cli) |
 | `qwen` | `qwen -p "<prompt>"` | [Qwen Code](https://github.com/QwenLM/qwen-code) |
 | `codex` | `codex exec "<prompt>"` | [Codex CLI](https://github.com/openai/codex) |
+| `deepseek` | `dsh --profile headless "<prompt>"` | [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) |
 | `cursor` | `cursor-agent -p --output-format text "<prompt>"` | [Cursor CLI](https://cursor.com/docs/cli/headless) |
 | `crush` | `crush run -q "<prompt>"` | [Charm Crush](https://github.com/charmbracelet/crush) |
 | `amp` | `amp -x "<prompt>"` | [Amp](https://ampcode.com) |
@@ -125,7 +126,8 @@ clean "no run command" answer does not.
 \* Never in the default chain, since `ollama run` pulls a multi-GB model on first use. Opt in with `RUNCOMMAND_AGENT=ollama RUNCOMMAND_MODEL=llama3.2`.</sub>
 
 `RUNCOMMAND_MODEL` overrides the model (`haiku` for `claude`, the agent's own default
-otherwise). **`runcommand agents`** shows the resolved chain; `--probe` actually calls each
+otherwise; `amp`, `goose` and `deepseek` take no per-call model flag, so it's ignored
+there — DeepSeek Harness picks its model from the booted profile). **`runcommand agents`** shows the resolved chain; `--probe` actually calls each
 one to confirm it responds (installed ≠ authenticated).
 
 **Any other CLI?** Point `RUNCOMMAND_DETECT_CMD` at anything that takes a prompt and prints

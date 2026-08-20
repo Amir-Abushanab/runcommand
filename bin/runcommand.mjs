@@ -398,6 +398,10 @@ const AGENTS = {
   gemini:   { bin: "gemini",       pre: (m) => [...(m ? ["-m", m] : []), "-p"],       model: "" },
   qwen:     { bin: "qwen",         pre: (m) => [...(m ? ["-m", m] : []), "-p"],       model: "" },
   codex:    { bin: "codex",        pre: (m) => ["exec", ...(m ? ["-m", m] : [])],     model: "" },
+  // DeepSeek Harness. Its headless profile is exactly our shape: "answer one task,
+  // print the final assistant message, and exit". The model isn't selectable per-call
+  // (it belongs to the profile), so RUNCOMMAND_MODEL is ignored here, as with amp/goose.
+  deepseek: { bin: "dsh",          pre: () => ["--profile", "headless"],               model: "" },
   cursor:   { bin: "cursor-agent", pre: (m) => ["-p", "--output-format", "text", ...(m ? ["--model", m] : [])], model: "" },
   crush:    { bin: "crush",        pre: (m) => ["run", "-q", ...(m ? ["-m", m] : [])], model: "" },
   amp:      { bin: "amp",          pre: () => ["-x"],                                 model: "" },
@@ -460,7 +464,7 @@ function findBin(name, override) {
 // on the machine. Order comes from RUNCOMMAND_AGENT (a comma/space list) or this
 // default; unknown names are ignored, uninstalled ones skipped. A full
 // RUNCOMMAND_DETECT_CMD is an explicit single backend and bypasses the chain.
-const DEFAULT_AGENT_ORDER = ["claude", "opencode", "gemini", "qwen", "codex", "cursor", "crush", "amp", "llm", "sgpt", "aider", "goose", "copilot"];
+const DEFAULT_AGENT_ORDER = ["claude", "opencode", "gemini", "qwen", "codex", "deepseek", "cursor", "crush", "amp", "llm", "sgpt", "aider", "goose", "copilot"];
 
 let AGENT_CHAIN = null;
 function agentChain() {
