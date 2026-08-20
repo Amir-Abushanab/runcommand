@@ -1,5 +1,14 @@
 # @amabush/runcommand
 
+## 0.2.1
+
+### Patch Changes
+
+- [`162b77f`](https://github.com/Amir-Abushanab/runcommand/commit/162b77fdb83682b717435471c279683232714ecc) Thanks [@Amir-Abushanab](https://github.com/Amir-Abushanab)! - Releases now run from CI. A changeset landing on `main` opens a "chore: version
+  packages" PR; merging it publishes to npm, tags, and cuts the GitHub Release — no
+  commands typed, no npm token stored. Publishing authenticates over OIDC (npm Trusted
+  Publishing), so releases carry provenance attestations.
+
 ## 0.2.0
 
 ### Minor Changes
