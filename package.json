@@ -2,6 +2,16 @@
   "name": "runcommand",
   "version": "0.1.0",
   "description": "Show each project's run/dev command in the Claude Code status bar. LLM-detected once, cached per-project.",
+  "author": "Amir Abushanab",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Amir-Abushanab/runcommand.git"
+  },
+  "homepage": "https://amir-abushanab.github.io/runcommand/",
+  "bugs": {
+    "url": "https://github.com/Amir-Abushanab/runcommand/issues"
+  },
   "type": "module",
   "bin": {
     "runcommand": "bin/runcommand.mjs"
@@ -28,7 +38,6 @@
     "run-command",
     "dev-command"
   ],
-  "license": "MIT",
   "packageManager": "pnpm@11.18.0",
   "devDependencies": {
     "@changesets/cli": "^3.0.0"
