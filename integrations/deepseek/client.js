@@ -10,7 +10,7 @@
 // about the conversation" — the shipped stats line lives there too. That makes it
 // the counterpart to Claude Code's status line and OpenCode's TUI footer.
 window.__ModuleLoader__.load({
-	id: "runcommand-dsh",
+	id: "@amabush/runcommand-dsh",
 	factory: (require) => {
 		var module = { exports: {} };
 		var exports = module.exports;

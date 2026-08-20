@@ -21,18 +21,24 @@ declared as **peer** dependencies on purpose: a second copy of `solid-js` is a
 second reactive graph, and a second `@opentui/solid` is a second renderer, so a
 shared copy is the one that works.
 
+**From this checkout**, `pnpm install` at the repo root is enough — this directory
+is a workspace package, so pnpm provides both peers and resolves `@opentui/core`
+inside `@opentui/solid`'s own store directory.
+
 ```sh
-cd integrations/opencode
-bun install            # self-contained (recommended for sharing)
+pnpm install           # from the repo root
 ```
 
-Or, if you already run another OpenCode plugin, symlink its copies (no network):
+Do **not** hand-symlink the peers into `node_modules/` here. That used to be the
+advice for sharing one copy with another plugin, but pnpm now owns this directory
+and will replace some links and not others — a stale symlink pointing at a since
+emptied directory silently breaks plugin load, with nothing in the TUI to say why.
+
+**Standalone** (not from a checkout), install the peers however your OpenCode
+install resolves them:
 
 ```sh
-# from an existing plugin's node_modules
-ln -sfn /path/to/other-plugin/node_modules/solid-js       node_modules/solid-js
-ln -sfn /path/to/other-plugin/node_modules/@opentui/solid node_modules/@opentui/solid
-ln -sfn /path/to/other-plugin/node_modules/@opentui/core  node_modules/@opentui/core
+bun install            # in the plugin directory
 ```
 
 Then register it in `~/.config/opencode/tui.json` (append — don't remove other

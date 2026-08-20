@@ -20,10 +20,10 @@ importers:
   integrations/opencode:
     dependencies:
       '@opentui/solid':
-        specifier: ^0.4.5
+        specifier: '>=0.4.5'
         version: 0.4.5(solid-js@1.9.15)(typescript@5.9.3)(web-tree-sitter@0.25.10)
       solid-js:
-        specifier: ^1.9.14
+        specifier: ^1.9.12
         version: 1.9.15
     devDependencies:
       '@opencode-ai/plugin':

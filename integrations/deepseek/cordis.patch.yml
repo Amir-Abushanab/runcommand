@@ -3,4 +3,4 @@
 # `exports["./client"]` to the page itself.
 - insert:
     - id: runcommand
-      name: runcommand-dsh
+      name: '@amabush/runcommand-dsh'

@@ -25,8 +25,14 @@ CLI — the same split as the [OpenCode plugin](../opencode/README.md).
 ## Install
 
 ```sh
-dsh plugin --profile web add runcommand-dsh
+# from this checkout — the package is NOT published yet, so a bare
+# `dsh plugin add @amabush/runcommand-dsh` would 404 against the registry
+dsh plugin --profile web add /path/to/runcommand/integrations/deepseek
 ```
+
+pnpm records that as `link:` — the profile points at your working copy, so edits
+show on the next `dsh web`. Once published it becomes `dsh plugin --profile web
+add @amabush/runcommand-dsh`.
 
 That's the whole install. The package declares `dsh.bundle.patch`, so its row
 mounts itself — no hand-edited user patch layer. The browser half is **not** a row
