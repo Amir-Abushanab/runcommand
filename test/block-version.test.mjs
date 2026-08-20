@@ -22,6 +22,19 @@ import { blockFingerprints, BLOCK_V } from "../bin/runcommand.mjs";
 // variants are pinned because the starship block genuinely differs — Windows has no
 // bash to pin — and the Windows one is the variant no local machine can produce.
 const FINGERPRINTS = {
+  // v3 added `when = true` to the starship block. Without a run condition starship
+  // skips a custom module entirely, so every v2 install has a segment that renders
+  // nothing and never even spawns the command.
+  3: {
+    starship: {
+      posix: "a37078a838f94c7b3d7db36bf67babcac8f2e23b",
+      win32: "f052609492552845553e70e1163ec88a7ac35860",
+    },
+    tmux: {
+      posix: "175bbf9f139946b21be245ad58bb00d247d747a7",
+      win32: "175bbf9f139946b21be245ad58bb00d247d747a7",
+    },
+  },
   2: {
     starship: {
       posix: "c739558482bbd9fb03201308e01268407f06899e",

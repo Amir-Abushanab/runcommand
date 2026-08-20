@@ -210,13 +210,17 @@ Qwen Code expose a config-based status line; for everything else, use an ambient
 ```toml
 [custom.runcommand]
 command = "runcommand promptline"   # or: node /path/to/bin/runcommand.mjs promptline
+when = true
 format = "($output )"
 shell = ["bash", "--noprofile", "--norc"]
 ignore_timeout = true
 ```
 
-`promptline` is non-blocking and prints nothing outside a project, so the segment simply
-disappears; `ignore_timeout` keeps a cold port scan under starship's 500 ms cap. For a
+`when = true` is not optional — starship skips a custom module that declares no run
+condition, so without it the segment renders nothing and the command is never even
+spawned. `promptline` is non-blocking and prints nothing outside a project, so it decides
+for itself when to disappear; `ignore_timeout` keeps a cold port scan under starship's
+500 ms cap. For a
 right-aligned tagline add `right_format = "${custom.runcommand}"`. The trailing space
 inside `($output )` is load-bearing — starship trims a module's output, so without it the
 next segment renders as `:4321took 10s`.

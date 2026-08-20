@@ -946,7 +946,7 @@ const CONFIG_HOME = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".con
 // the binary, never the lines already sitting in someone's starship.toml.
 //   v1 — original, unversioned marker
 //   v2 — starship: format = "($output )", the conditional trailing separator
-const BLOCK_V = 2;
+const BLOCK_V = 3;
 const MARK_BEGIN = `# >>> runcommand v${BLOCK_V} (managed by \`runcommand init\`)`;
 const MARK_END = "# <<< runcommand";
 // Matches every generation of the opening marker, v1's unversioned one included, so
@@ -975,6 +975,11 @@ const BLOCK_HARNESSES = [
     block: (self, win) => [
       "[custom.runcommand]",
       `command = ${JSON.stringify(self + " promptline")}`,
+      // REQUIRED. A custom module with no `when`/`detect_*` condition never runs, so
+      // the segment renders as nothing at all — silently, with the command never
+      // spawned. `promptline` decides for itself whether there's anything to show
+      // (it prints an empty string outside a project), so the condition is just true.
+      "when = true",
       // starship TRIMS a custom module's output, so promptline's own trailing space
       // never survives — the separator has to live in the format. The (…) group keeps
       // it conditional, so an empty segment doesn't leave a stray space behind.
