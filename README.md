@@ -43,8 +43,8 @@ run. `--dry-run` previews the lot without writing, `--yes` skips the prompts, an
 
 Needs **Node ≥ 18** (already there if you run Claude Code) and an **AI CLI on your
 `PATH`** for detection — [`claude`](https://claude.com/claude-code) by default; OpenCode,
-Gemini CLI, Qwen Code or Codex work too. Developed on macOS/Linux; [Windows](#windows) is
-best-effort.
+Gemini CLI, Qwen Code, Codex or [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
+work too. Developed on macOS/Linux; [Windows](#windows) is best-effort.
 
 <details>
 <summary>From a clone instead</summary>
