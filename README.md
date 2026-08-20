@@ -33,12 +33,15 @@ your status line (see [Coexisting](#coexisting-with-another-status-line)).
 > 🌐 **Showcase:** the [`site/`](site/) directory is an Astro page (run it locally
 > with `pnpm site`) that deploys to `https://amir-abushanab.github.io/runcommand/`.
 
-**Jump to:** [Install](#install) · [Claude Code](#wire-it-into-claude-code) · [Detection agent](#detection-agent) · [Live ports](#live-localhost-ports) · [Shell prompt](#shell-prompt-starship) · [Other surfaces](#other-agents-and-prompts) · [tmux & ambient](#terminal-multiplexers--ambient-surfaces) · [Commands](#commands) · [Config](#config-env-vars) · [How it works](#how-detection-works)
+**Jump to:** [Install](#install) · [Claude Code](#wire-it-into-claude-code) · [Detection agent](#detection-agent) · [Live ports](#live-localhost-ports) · [Shell prompt](#shell-prompt-starship) · [Other surfaces](#other-agents-and-prompts) · [tmux & ambient](#terminal-multiplexers--ambient-surfaces) · [Windows](#windows) · [Commands](#commands) · [Versioning](#versioning-and-compatibility) · [Config](#config-env-vars) · [How it works](#how-detection-works)
 
 ## Requirements
 
 - **Node** ≥ 18 (already present if you run Claude Code)
 - An **AI CLI for detection** on your `PATH` — [`claude`](https://claude.com/claude-code) (Claude Code) by default; OpenCode, Gemini CLI, Qwen Code, or Codex work too (see [Detection agent](#detection-agent))
+- **macOS / Linux** are what this is developed and used on. **Windows** is
+  supported but **untested** — see [Windows](#windows) for what differs and what
+  to watch for.
 
 ## Install
 
@@ -226,9 +229,9 @@ localhost servers, as clickable links:
 ▶ pnpm dev   ◉ :3000 :5173
 ```
 
-Ports are found via `lsof` and **scoped to the project** — only listeners whose
-process is running inside the project directory are shown (so postgres, docker,
-and other machines' servers don't leak in). Ephemeral/internal ports (`≥ 49152`,
+Ports are found via `lsof` (`netstat -ano` on Windows) and **scoped to the
+project** — only listeners whose process is running inside the project directory
+are shown (so postgres, docker, and other machines' servers don't leak in). Ephemeral/internal ports (`≥ 49152`,
 e.g. `workerd` plumbing) and debuggers (`9229`) are filtered out. The scan is
 cached briefly (`RUNCOMMAND_PORTS_TTL_MS`, default 2.5s) so it stays cheap on the
 status-line hot path. Set `RUNCOMMAND_NO_PORTS=1` to hide them.
@@ -257,7 +260,7 @@ module to `~/.config/starship.toml`:
 ```toml
 [custom.runcommand]
 command = "runcommand promptline"   # or: node /path/to/bin/runcommand.mjs promptline
-format = "$output"
+format = "($output )"
 shell = ["bash", "--noprofile", "--norc"]
 ignore_timeout = true
 ```
@@ -268,6 +271,11 @@ custom modules inline by default; for a right-aligned tagline add
 `right_format = "${custom.runcommand}"`. (`ignore_timeout` keeps a cold port scan
 from tripping starship's 500 ms command cap. For oh-my-zsh or a bare prompt, call
 the same command from a `precmd` hook.) This is exactly what `runcommand init` writes.
+
+The trailing space inside `($output )` is load-bearing: starship trims a custom
+module's output, so without it the next segment — usually `cmd_duration` — renders
+as `:4321took 10s`. The surrounding `(…)` is a conditional group, so the space
+disappears along with the segment in directories that have nothing to show.
 
 ## Other agents and prompts
 
@@ -420,8 +428,9 @@ future manifest change won't regress to the wrong answer. Wipe it with
 
 ## Where the cache lives, and for how long
 
-`$XDG_CACHE_HOME/runcommand/` (falls back to `~/.cache/runcommand/`), one JSON
-file per project, named `<sha1(project-root)>.json`.
+`$XDG_CACHE_HOME/runcommand/` (falls back to `~/.cache/runcommand/`, or
+`%LOCALAPPDATA%\runcommand` on Windows), one JSON file per project, named
+`<sha1(project-root)>.json`.
 
 There is **no time-based expiry** by default — a detected command is cached
 *indefinitely*. It's invalidated by **content, not time**: each render hashes the
@@ -441,6 +450,106 @@ until you `refresh` it or delete the file.
 
 Set `RUNCOMMAND_TTL_MS` to also re-detect after a fixed age regardless of
 changes (off by default).
+
+## Versioning and compatibility
+
+runcommand persists three quite different kinds of state, and each gets a
+different compatibility rule. Worth knowing before you upgrade — or before you
+change one of these formats.
+
+**1. The detection cache — versioned, and disposable.** Every cache file carries a
+`"v"` field. A file whose `v` this build doesn't recognise is treated as a plain
+cache miss, exactly like a signals-hash mismatch, and re-detected. That's safe in
+both directions: an old build ignores a field it's never heard of, and a new build
+refuses to read a shape it doesn't understand. It's cheap to be strict here — the
+cache is derived state, so the entire cost of discarding one is a single detection
+call. (Upgrading to this version invalidates existing caches once, for that
+reason.) The separate ports cache is deliberately *not* versioned; it self-heals
+inside its 2.5 s TTL.
+
+**2. The generated config blocks — versioned, and migrated.** This is the one that
+actually needs care, because **`npm i -g runcommand@latest` cannot fix it**. `init`
+writes real lines into files you own — `~/.config/starship.toml`, `~/.tmux.conf` —
+and a package upgrade never revisits them. So each block is fenced with a
+version-stamped marker:
+
+```toml
+# >>> runcommand v2 (managed by `runcommand init`)
+...
+# <<< runcommand
+```
+
+Re-run `runcommand init` after upgrading and it compares that stamp against the
+current `BLOCK_V`. An older block is reported and **offered an in-place refresh** —
+only the lines between the markers are touched, spacing around them is preserved,
+and the file is backed up first, like every other write `init` makes. Older,
+unversioned markers (`# >>> runcommand`, written before this existed) are still
+recognised as v1, so nothing installed by an earlier release is stranded.
+
+If you wired runcommand up **by hand**, there are no markers and `init` will never
+rewrite your file — it prints the one-line change to make and leaves the file
+byte-for-byte alone.
+
+**3. Your `.claude-run` and `CLAUDE.md` overrides — never versioned.** These are
+input you wrote, not state runcommand generated. The rule is simply that the syntax
+only ever grows: new forms get added, existing ones keep working. Asking you to
+migrate a file you authored would be the wrong trade.
+
+A related note on the cache shape: `normalizeCommands` still reads the original
+single-`command` form as well as today's `commands` array, which is why multi-command
+support was added as a new field rather than a rename. Both are covered by tests.
+
+### Releasing
+
+Releases go through [changesets](https://github.com/changesets/changesets): every
+user-visible change gets a `pnpm changeset` note, `pnpm version` consumes them into
+a version bump and `CHANGELOG.md`, and `pnpm release` publishes.
+
+The rule that matters is the one changesets can't enforce on its own — **the npm
+version and `BLOCK_V` are independent, and only `BLOCK_V` affects config people
+already have on disk.** So a release that changes a generated block is a `minor` at
+minimum and its note must say *re-run `runcommand init`*. A test
+(`test/block-version.test.mjs`) fingerprints every generated block and pins it to
+the current `BLOCK_V`, so changing one without bumping the version fails the build
+rather than silently stranding existing installs.
+
+`pnpm test` runs on Linux, macOS **and Windows** in CI, plus a CLI smoke test on
+each — that matrix is the only place the Windows code actually executes.
+
+## Windows
+
+Windows is wired up but **has not been run on a real Windows machine** — treat it
+as best-effort and please open an issue with what breaks. Rendering is the easy
+half: Windows Terminal handles ANSI styling and OSC 8 hyperlinks, so the line and
+its clickable ports should look the same as anywhere else. What differs underneath:
+
+| | macOS / Linux | Windows |
+|---|---|---|
+| Listener scan | `lsof -nP -iTCP -sTCP:LISTEN` | `netstat -ano -p TCP` |
+| Scoped to project by | process **cwd** (`lsof -a -d cwd`) | process **command line** (`Get-CimInstance Win32_Process`) |
+| Agent lookup | exact filename on `PATH` | `PATHEXT` probing, so `claude` finds `claude.cmd` |
+| starship `shell` | pinned to `bash --noprofile --norc` | omitted; starship's `cmd /C` default |
+| PATH install | symlink into `~/.local/bin` | `npm i -g <repo>` (symlinks need Developer Mode) |
+| Cache dir | `~/.cache/runcommand` | `%LOCALAPPDATA%\runcommand` |
+
+The port scoping is the one real compromise. Windows exposes no process working
+directory to a plain CLI — there's no `lsof -d cwd` equivalent, and
+`Win32_Process` doesn't carry cwd — so runcommand matches the project path against
+each listener's **command line** instead. That covers the common case (a dev server
+launched from the project has the path in its argv: `node ...\node_modules\vite\bin\vite.js`)
+and is deliberately biased toward showing *nothing* rather than showing another
+project's port. A server whose argv never mentions the project path won't be
+picked up; `runcommand ports --all` ignores scoping entirely and lists every
+localhost listener.
+
+Two Windows details worth knowing: `netstat`'s state column is localized, so
+listeners are identified by their foreign address (`:0`) rather than by matching
+the word `LISTENING`; and the `Win32_Process` query costs a PowerShell spawn, which
+the 2.5 s port cache (`RUNCOMMAND_PORTS_TTL_MS`) keeps off the hot path.
+
+`runcommand init` won't offer tmux on Windows — neither a `tmux` binary nor a
+`~/.tmux.conf` is found, so it isn't listed as installed. Claude Code and starship
+wiring work the same, since both keep their config under `~/`.
 
 ## How detection works
 

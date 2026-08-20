@@ -15,7 +15,11 @@
   "scripts": {
     "detect": "node bin/runcommand.mjs detect",
     "statusline": "node bin/runcommand.mjs statusline",
-    "site": "pnpm --dir site dev"
+    "site": "pnpm --dir site dev",
+    "test": "node --test \"test/**/*.test.mjs\"",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "changeset publish"
   },
   "keywords": [
     "claude-code",
@@ -25,5 +29,8 @@
     "dev-command"
   ],
   "license": "MIT",
-  "packageManager": "pnpm@11.18.0"
+  "packageManager": "pnpm@11.18.0",
+  "devDependencies": {
+    "@changesets/cli": "^3.0.0"
+  }
 }

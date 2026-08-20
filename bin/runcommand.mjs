@@ -13,6 +13,10 @@
  * status-line tool via RUNCOMMAND_BASE (see `statusline` below) — it never
  * assumes or touches another tool's config.
  *
+ * Developed on macOS/Linux. Windows is supported but UNTESTED on real hardware:
+ * everything platform-specific is behind IS_WIN (port scan, PATHEXT lookup, init
+ * wiring, cache dir) — see the README's Windows section for what differs.
+ *
  * Subcommands:
  *   statusline      render the run-command line (called by Claude Code, stdin=JSON)
  *   detect [dir]    (re)detect now, synchronously; print + cache the command
@@ -35,6 +39,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const SELF = fileURLToPath(import.meta.url);
+const IS_WIN = process.platform === "win32";
 const ICON = process.env.RUNCOMMAND_ICON ?? "▶";
 const LABEL = process.env.RUNCOMMAND_LABEL ?? ""; // e.g. "run: "
 const DETECT_TIMEOUT_MS = 90_000;
@@ -43,8 +48,16 @@ const LOCK_STALE_MS = 3 * 60_000;
 // re-checks projects whose files we couldn't hash (edge cases); default off.
 const TTL_MS = Number(process.env.RUNCOMMAND_TTL_MS || 0);
 
+// Cache schema version. Bump when a cached field changes meaning in a way another
+// build would misread — a version this code doesn't recognise is simply treated as
+// a miss. Cheap insurance: the cache is derived state, so the whole cost of
+// throwing one away is a single detection call. (Deliberately NOT applied to the
+// ports cache, which self-heals inside its 2.5s TTL.)
+const CACHE_V = 1;
+
 const CACHE_DIR = path.join(
-  process.env.XDG_CACHE_HOME || path.join(os.homedir(), ".cache"),
+  // ~/.cache is a posix convention; Windows keeps throwaway state in LOCALAPPDATA.
+  process.env.XDG_CACHE_HOME || (IS_WIN && process.env.LOCALAPPDATA) || path.join(os.homedir(), ".cache"),
   "runcommand",
 );
 
@@ -243,12 +256,15 @@ function cachePathFor(root) {
   return path.join(CACHE_DIR, sha1(path.resolve(root)) + ".json");
 }
 function loadCache(root) { return readJson(cachePathFor(root)); }
+// Usable = written by a schema we understand AND the project's signals still hash
+// the same. Either check failing means re-detect; neither can throw.
+const cacheUsable = (cache, root) => !!cache && cache.v === CACHE_V && cache.signalsHash === signalsHash(root);
 function saveCache(root, data) {
   try {
     fs.mkdirSync(CACHE_DIR, { recursive: true });
     const p = cachePathFor(root);
     const tmp = p + "." + process.pid + ".tmp";
-    fs.writeFileSync(tmp, JSON.stringify({ root, ...data }, null, 2));
+    fs.writeFileSync(tmp, JSON.stringify({ v: CACHE_V, root, ...data }, null, 2));
     fs.renameSync(tmp, p);
   } catch (e) { stripAnsiSafeLog("cache write failed:", e.message); }
 }
@@ -407,16 +423,34 @@ const BIN_DIRS = [
   "/opt/homebrew/bin",
   "/usr/local/bin",
   path.join(os.homedir(), ".claude/local"),
+  // Windows: npm's global shim dir and the Store alias dir, neither guaranteed on
+  // the minimal PATH a status line inherits.
+  ...(IS_WIN ? [
+    path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "npm"),
+    path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local"), "Microsoft", "WindowsApps"),
+  ] : []),
 ];
+// Windows resolves a bare name through PATHEXT (`claude` is really claude.cmd), so
+// probing the extensionless path alone finds nothing and every agent looks missing.
+const PATHEXTS = IS_WIN
+  ? (process.env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";").map((e) => e.trim()).filter(Boolean)
+  : [];
+const isFile = (p) => { try { return fs.statSync(p).isFile(); } catch { return false; } };
+function binAt(dir, name) {
+  const base = path.join(dir, name);
+  if (isFile(base)) return base;
+  for (const ext of PATHEXTS) { const p = base + ext; if (isFile(p)) return p; }
+  return null;
+}
 // Resolve a command to an absolute path, or null if it isn't installed. Checks an
 // explicit override, then the well-known dirs, then every entry on $PATH.
 function findBin(name, override) {
   if (override && exists(override)) return override;
-  for (const dir of BIN_DIRS) { const p = path.join(dir, name); if (exists(p)) return p; }
+  for (const dir of BIN_DIRS) { const p = binAt(dir, name); if (p) return p; }
   for (const dir of (process.env.PATH || "").split(path.delimiter)) {
     if (!dir) continue;
-    const p = path.join(dir, name);
-    if (exists(p)) return p;
+    const p = binAt(dir, name);
+    if (p) return p;
   }
   return null;
 }
@@ -549,8 +583,34 @@ function lsofFields(args) {
   } catch { return ""; }
 }
 
+// `netstat -ano -p TCP` rows look like:
+//   "  TCP    0.0.0.0:3000    0.0.0.0:0    LISTENING    1234"
+// The state word is LOCALIZED on non-English Windows, so listeners are identified
+// by their foreign address (port 0 for anything not connected) instead of by
+// string-matching "LISTENING". Pure function so it can be checked against fixtures.
+function parseNetstat(text) {
+  const out = [];
+  for (const line of text.split("\n")) {
+    const f = line.trim().split(/\s+/);
+    if (f.length < 5 || f[0].toUpperCase() !== "TCP") continue;
+    const [, local, foreign, , pidStr] = f;
+    if (!/:0$/.test(foreign)) continue;
+    const m = local.match(LOCAL_ADDR);
+    const pid = Number(pidStr);
+    if (m && pid > 0) out.push({ pid, port: Number(m[1]) });
+  }
+  return out;
+}
+
 // [{pid, port}] for localhost / wildcard TCP listeners.
 function scanListeners() {
+  if (IS_WIN) {
+    try {
+      const res = spawnSync("netstat", ["-ano", "-p", "TCP"],
+        { encoding: "utf8", timeout: 4000, maxBuffer: 4 * 1024 * 1024, windowsHide: true });
+      return parseNetstat(res.stdout || "");
+    } catch { return []; }
+  }
   const out = [];
   let pid = null;
   for (const line of lsofFields(["-nP", "-iTCP", "-sTCP:LISTEN", "-Fpn"]).split("\n")) {
@@ -579,13 +639,57 @@ function cwdsFor(pids) {
   return map;
 }
 
+// Windows exposes no process working directory to a plain CLI — there is no
+// `lsof -d cwd` equivalent, and Win32_Process doesn't carry cwd — so scope by
+// COMMAND LINE instead. A dev server started inside a project nearly always has the
+// project path in its argv (node running .\node_modules\vite\bin\vite.js, an
+// explicit "--dir site", …). It's a proxy for cwd, deliberately biased toward
+// showing nothing over showing another project's port.
+function cmdlinesFor(pids) {
+  const map = {};
+  if (!pids.length) return map;
+  const filter = pids.map((p) => `ProcessId=${p}`).join(" or ");
+  const script = `Get-CimInstance Win32_Process -Filter '${filter}' | ForEach-Object { $_.ProcessId.ToString() + '|' + $_.CommandLine }`;
+  try {
+    const res = spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", script],
+      { encoding: "utf8", timeout: 4000, maxBuffer: 4 * 1024 * 1024, windowsHide: true });
+    for (const line of (res.stdout || "").split("\n")) {
+      const i = line.indexOf("|");
+      if (i < 0) continue;
+      const pid = Number(line.slice(0, i));
+      if (pid > 0) map[pid] = line.slice(i + 1).trim();
+    }
+  } catch {}
+  return map;
+}
+
+// Does a command line point inside this project? Separator- and case-insensitive
+// (Windows paths are both), and the hit must land on a path boundary so a project
+// at C:\app doesn't claim a server running out of C:\app-legacy.
+function cmdlineInProject(cmdline, root) {
+  const norm = (s) => s.replace(/\//g, "\\").toLowerCase();
+  const hay = norm(cmdline), needle = norm(root);
+  if (!needle) return false;
+  for (let i = hay.indexOf(needle); i >= 0; i = hay.indexOf(needle, i + 1)) {
+    const after = hay[i + needle.length];
+    if (after === undefined || after === "\\" || after === '"' || after === "'" || after === " ") return true;
+  }
+  return false;
+}
+
 function computePorts(root, all) {
   const listeners = scanListeners().filter((l) => keepPort(l.port));
   if (!listeners.length) return [];
-  if (all) return [...new Set(listeners.map((l) => l.port))].sort((a, b) => a - b);
-  const cwds = cwdsFor([...new Set(listeners.map((l) => l.pid))]);
-  const inProject = (p) => { const c = cwds[p]; return c && (c === root || c.startsWith(root + path.sep)); };
-  return [...new Set(listeners.filter((l) => inProject(l.pid)).map((l) => l.port))].sort((a, b) => a - b);
+  const uniq = (ps) => [...new Set(ps)].sort((a, b) => a - b);
+  if (all) return uniq(listeners.map((l) => l.port));
+  const pids = [...new Set(listeners.map((l) => l.pid))];
+  const owner = IS_WIN ? cmdlinesFor(pids) : cwdsFor(pids);
+  const inProject = (p) => {
+    const c = owner[p];
+    if (!c) return false;
+    return IS_WIN ? cmdlineInProject(c, root) : (c === root || c.startsWith(root + path.sep));
+  };
+  return uniq(listeners.filter((l) => inProject(l.pid)).map((l) => l.port));
 }
 
 function portsCachePath(root) { return path.join(CACHE_DIR, "ports-" + sha1(path.resolve(root)) + ".json"); }
@@ -629,7 +733,7 @@ function currentCommands(root) {
   const override = readOverride(root);
   if (override) return { commands: override.commands, detecting: false };
   const cache = loadCache(root);
-  const fresh = cache && cache.signalsHash === signalsHash(root) && (!TTL_MS || Date.now() - (cache.detectedAt || 0) < TTL_MS);
+  const fresh = cacheUsable(cache, root) && (!TTL_MS || Date.now() - (cache.detectedAt || 0) < TTL_MS);
   if (fresh) return { commands: normalizeCommands(cache), detecting: false };
   triggerBackgroundDetect(root);
   const known = normalizeCommands(cache);
@@ -831,8 +935,28 @@ function unwireJson(h) {
 // config. Coexistence is native — starship shows custom modules alongside the rest,
 // and tmux's `set -ga` APPENDS to your existing status-right rather than clobbering it.
 const CONFIG_HOME = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
-const MARK_BEGIN = "# >>> runcommand (managed by `runcommand init`)";
+// Generated blocks carry a schema version in their opening marker, so a later
+// release can recognise one it wrote under older rules and offer to refresh it.
+// This is the ONLY migration path config has: `npm i -g runcommand@latest` updates
+// the binary, never the lines already sitting in someone's starship.toml.
+//   v1 — original, unversioned marker
+//   v2 — starship: format = "($output )", the conditional trailing separator
+const BLOCK_V = 2;
+const MARK_BEGIN = `# >>> runcommand v${BLOCK_V} (managed by \`runcommand init\`)`;
 const MARK_END = "# <<< runcommand";
+// Matches every generation of the opening marker, v1's unversioned one included, so
+// uninstall and drift detection keep working on blocks older releases wrote.
+const MARK_BEGIN_SRC = "# >>> runcommand(?: v(\\d+))? \\(managed by `runcommand init`\\)";
+const reEsc = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// keepLead: leave whatever blank space precedes the block alone. Removal wants it
+// swallowed (no orphan gap); an in-place refresh wants the user's spacing intact.
+const blockRegionRe = ({ keepLead = false } = {}) =>
+  new RegExp((keepLead ? "" : "\\n*") + MARK_BEGIN_SRC + "[\\s\\S]*?" + reEsc(MARK_END) + "\\n?", "g");
+// null when the file holds no runcommand block; otherwise the version that wrote it.
+function blockVersionIn(text) {
+  const m = text.match(new RegExp(MARK_BEGIN_SRC));
+  return m ? Number(m[1] || 1) : null;
+}
 const STARSHIP_FILE = path.join(CONFIG_HOME, "starship.toml");
 const TMUX_FILE = exists(path.join(CONFIG_HOME, "tmux", "tmux.conf"))
   ? path.join(CONFIG_HOME, "tmux", "tmux.conf")
@@ -843,25 +967,57 @@ const BLOCK_HARNESSES = [
     key: "starship", label: "starship", file: STARSHIP_FILE,
     installed: () => !!findBin("starship") || exists(STARSHIP_FILE),
     already: (cur) => cur.includes("[custom.runcommand]"),
-    block: () => [
+    block: (self) => [
       "[custom.runcommand]",
-      `command = ${JSON.stringify(selfInvocation() + " promptline")}`,
-      'format = "$output"',
-      'shell = ["bash", "--noprofile", "--norc"]',
+      `command = ${JSON.stringify(self + " promptline")}`,
+      // starship TRIMS a custom module's output, so promptline's own trailing space
+      // never survives — the separator has to live in the format. The (…) group keeps
+      // it conditional, so an empty segment doesn't leave a stray space behind.
+      'format = "($output )"',
+      // Pin the shell so a heavy interactive profile never runs once per prompt.
+      // Windows has no bash to pin — omitting it lets starship use its cmd /C default.
+      ...(IS_WIN ? [] : ['shell = ["bash", "--noprofile", "--norc"]']),
       "ignore_timeout = true", // promptline can outlast starship's 500ms global cap
     ],
+    // Configs wired before the format fix squish the next segment (":4321took 10s").
+    // Never rewritten for you — a starship.toml is hand-owned — just pointed at.
+    stale: (cur) => (/format\s*=\s*['"]\$output['"]/.test(cur)
+      ? 'format = "$output"  →  format = "($output )"   (starship trims the command output, so the space that separates the next segment has to live in the format)'
+      : null),
   },
   {
     key: "tmux", label: "tmux", file: TMUX_FILE,
     installed: () => !!findBin("tmux") || exists(TMUX_FILE),
     already: (cur) => /status-right.*runcommand/.test(cur),
-    block: () => [`set -ga status-right " #(${selfInvocation()} prompt -C '#{pane_current_path}')"`],
+    block: (self) => [`set -ga status-right " #(${self} prompt -C '#{pane_current_path}')"`],
   },
 ];
-function blockText(h) { return [MARK_BEGIN, ...h.block(), MARK_END, ""].join("\n"); }
+function blockText(h) { return [MARK_BEGIN, ...h.block(selfInvocation()), MARK_END, ""].join("\n"); }
+// Content hash of each generated block with the invocation stubbed, so it's stable
+// across machines. Tests pin these against BLOCK_V: editing a block without bumping
+// the version is the one mistake that silently leaves every existing install on
+// stale config, and a package release can't undo it.
+function blockFingerprints() {
+  const out = {};
+  for (const h of BLOCK_HARNESSES) out[h.key] = sha1(h.block("<self>").join("\n"));
+  return out;
+}
 function planBlock(h) {
   const cur = exists(h.file) ? fs.readFileSync(h.file, "utf8") : "";
-  return { file: h.file, action: (cur.includes(MARK_BEGIN) || (h.already && h.already(cur))) ? "none" : "add" };
+  const v = blockVersionIn(cur);
+  // Fenced by us: safe to rewrite, since we wrote every line between the markers.
+  if (v !== null) return { file: h.file, action: v < BLOCK_V ? "refresh" : "none", from: v };
+  // Wired by hand (no markers): never rewrite it — only name what's out of date.
+  if (h.already && h.already(cur)) return { file: h.file, action: "none", stale: h.stale ? h.stale(cur) : null };
+  return { file: h.file, action: "add" };
+}
+// Swap a fenced block for the current one, leaving everything outside the markers
+// untouched. Backed up first, like every other write init makes.
+function replaceBlock(h) {
+  const bak = backupFile(h.file);
+  const cur = fs.readFileSync(h.file, "utf8");
+  fs.writeFileSync(h.file, cur.replace(blockRegionRe({ keepLead: true }), blockText(h)));
+  return bak;
 }
 function applyBlock(h) {
   fs.mkdirSync(path.dirname(h.file), { recursive: true });
@@ -874,8 +1030,7 @@ function applyBlock(h) {
 function unwireBlock(h) {
   if (!exists(h.file)) return { action: "none" };
   const cur = fs.readFileSync(h.file, "utf8");
-  const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const re = new RegExp(`\\n*${esc(MARK_BEGIN)}[\\s\\S]*?${esc(MARK_END)}\\n?`, "g");
+  const re = blockRegionRe();
   if (!re.test(cur)) return { action: "none" };
   const bak = backupFile(h.file);
   fs.writeFileSync(h.file, cur.replace(re, "\n"));
@@ -924,7 +1079,12 @@ async function runInit() {
     // 1. PATH
     const onPath = findBin("runcommand");
     if (onPath) say(`✓ runcommand on PATH: ${onPath}`);
-    else {
+    else if (IS_WIN) {
+      // No ~/.local/bin convention, and fs.symlink needs Developer Mode or admin.
+      // npm's generated shim is the supported way to put a name on PATH here.
+      say(`• runcommand isn't on your PATH; configs will call it via: ${selfInvocation()}`);
+      say(`  To shorten that: npm i -g ${JSON.stringify(path.dirname(path.dirname(SELF)))}`);
+    } else {
       const target = path.join(os.homedir(), ".local", "bin", "runcommand");
       say(`• runcommand isn't on your PATH; configs will call it via: ${selfInvocation()}`);
       if (dry) say(`  [dry-run] could symlink ${target} → this script`);
@@ -951,7 +1111,20 @@ async function runInit() {
     for (const h of picks) {
       if (h.block) {
         const p = planBlock(h);
-        if (p.action === "none") { say(`\n  ${h.label}: already wired — ${p.file}`); continue; }
+        if (p.action === "none") {
+          say(`\n  ${h.label}: already wired — ${p.file}`);
+          if (p.stale) say(`    ↻ worth updating by hand:  ${p.stale}`);
+          continue;
+        }
+        if (p.action === "refresh") {
+          say(`\n  ${h.label}: block was written by v${p.from}, current is v${BLOCK_V} — ${p.file}`);
+          if (dry) { say(`    [dry-run] would refresh the block in place`); continue; }
+          if (!(await confirm(rl, `    refresh it in place? [Y/n] `))) { say(`    skipped`); continue; }
+          const bak = replaceBlock(h);
+          say(`    ✓ refreshed${bak ? `  (backup: ${path.basename(bak)})` : ""}`);
+          if (h.key === "tmux") say(`    reload with: tmux source-file ${p.file}  (or restart tmux)`);
+          continue;
+        }
         say(`\n  ${h.label}: append runcommand block → ${p.file}`);
         if (dry) { say(`    [dry-run] not written`); continue; }
         if (!(await confirm(rl, `    apply? [Y/n] `))) { say(`    skipped`); continue; }
@@ -994,7 +1167,7 @@ async function runUninstall() {
   }
   for (const h of BLOCK_HARNESSES) {
     const cur = exists(h.file) ? fs.readFileSync(h.file, "utf8") : "";
-    if (cur.includes(MARK_BEGIN)) {
+    if (blockVersionIn(cur) !== null) {
       if (dry) say(`  ${h.label}: [dry-run] would remove the runcommand block — ${h.file}`);
       else { const r = unwireBlock(h); say(`  ${h.label}: removed runcommand block — ${h.file}${r.bak ? `  (backup: ${path.basename(r.bak)})` : ""}`); }
     } else if (h.already && h.already(cur)) {
@@ -1075,8 +1248,9 @@ async function main() {
       const { commands } = currentCommands(root);
       const parts = [renderRunLine(commands, "ok"), renderPorts(getPorts(root), { style: "compact" })].filter(Boolean);
       const line = parts.join("  ");
-      // Trailing space so a following prompt segment (e.g. starship's cmd_duration
-      // "took 36m") isn't squished against the ports. Empty stays empty.
+      // Trailing space so a bare consumer (a hand-rolled PS1) doesn't squish the next
+      // segment against the ports. starship trims this away — its module carries the
+      // separator in `format` instead (see BLOCK_HARNESSES). Empty stays empty.
       process.stdout.write(line ? line + " " : "");
       break;
     }
@@ -1113,7 +1287,7 @@ async function main() {
       const override = readOverride(root);
       let commands;
       if (override) commands = override.commands;
-      else if (cache && cache.signalsHash === signalsHash(root)) commands = normalizeCommands(cache);
+      else if (cacheUsable(cache, root)) commands = normalizeCommands(cache);
       else commands = (detect(root, { quiet: true }) || {}).commands;
       process.stdout.write(formatCommandsCLI(commands) + "\n");
       break;
@@ -1130,4 +1304,16 @@ async function main() {
   }
 }
 
-main();
+// Run only when invoked as the CLI — importing this file (from tests) must not
+// execute anything. argv[1] is the symlink when installed via ~/.local/bin, while
+// import.meta.url is already symlink-resolved, so compare real paths.
+const invokedAsCli = (() => {
+  const a = process.argv[1];
+  if (!a) return false;
+  const eq = (x, y) => (IS_WIN ? x.toLowerCase() === y.toLowerCase() : x === y);
+  try { return eq(fs.realpathSync(a), SELF); } catch { return eq(path.resolve(a), SELF); }
+})();
+if (invokedAsCli) main();
+
+// Pure helpers, exported for tests. Nothing here touches the filesystem or spawns.
+export { parseNetstat, cmdlineInProject, normalizeCommands, formatCommandsCLI, keepPort, blockVersionIn, blockFingerprints, BLOCK_V, CACHE_V };

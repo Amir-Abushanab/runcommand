@@ -12,5 +12,6 @@ dist/
 *.log
 .DS_Store
 
-# stray root lockfile (this package is zero-dep; site/ keeps its own)
-/pnpm-lock.yaml
+# The shipped CLI is still zero-dependency — bin/ imports nothing but node: —
+# but the repo now has devDependencies (changesets), so the root lockfile is
+# tracked. CI installs with --frozen-lockfile and needs it. site/ keeps its own.

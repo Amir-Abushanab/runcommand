@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["site/**", "assets/**"]
+  pull_request:
+    paths-ignore: ["site/**", "assets/**"]
+  workflow_dispatch:
+
+jobs:
+  test:
+    # Windows is the point of the matrix, not an afterthought: the platform-specific
+    # code (netstat parsing, PATHEXT lookup, init wiring) can't be exercised on the
+    # machine this is developed on, so CI is the only place it actually runs.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4 # version comes from package.json "packageManager"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22 # pnpm@11 requires Node >= 22.13
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+
+      # Smoke test the real CLI on each OS. Detection is deliberately not exercised
+      # — no agent is installed here — so these are the paths that touch the
+      # filesystem, the process table and PATH, which is where platform bugs live.
+      - name: CLI smoke test
+        shell: bash
+        run: |
+          set -euxo pipefail
+          node bin/runcommand.mjs help > /dev/null
+          node bin/runcommand.mjs ports --all
+          node bin/runcommand.mjs ports --json
+          node bin/runcommand.mjs agents
+          node bin/runcommand.mjs path
+          node bin/runcommand.mjs init --dry-run --yes
