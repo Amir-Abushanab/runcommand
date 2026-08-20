@@ -49,9 +49,23 @@ support was added as a new field rather than a rename. Both are covered by tests
 
 ## Releasing
 
-Releases go through [changesets](https://github.com/changesets/changesets): every
-user-visible change gets a `pnpm changeset` note, `pnpm version` consumes them into a
-version bump and `CHANGELOG.md`, and `pnpm release` publishes.
+Releases go through [changesets](https://github.com/changesets/changesets) and run
+themselves. Every user-visible change gets a `pnpm changeset` note; from there the
+`Release` workflow does the rest:
+
+1. Pushing a changeset to `main` opens (and keeps rebasing) a **"chore: version
+   packages"** PR with the bumps and the changelog entries it would write.
+2. **Merging that PR is the release.** The workflow publishes whatever is unpublished,
+   pushes the `@pkg@x.y.z` tags, and creates the GitHub Releases.
+
+Nothing is published from a laptop and there is no npm token anywhere — the job
+exchanges its GitHub OIDC identity for a short-lived npm credential, so each package's
+Trusted Publisher on npmjs.com must name exactly `Amir-Abushanab / runcommand /
+release.yml`. `pnpm test` gates the publish inside that workflow, because `ci.yml` is a
+separate workflow that couldn't otherwise block it.
+
+The two packages version **independently** (no `fixed` group): a plugin fix shouldn't
+bump the CLI.
 
 The rule that matters is the one changesets can't enforce on its own — **the npm version and
 `BLOCK_V` are independent, and only `BLOCK_V` affects config people already have on disk.**

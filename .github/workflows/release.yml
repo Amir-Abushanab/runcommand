@@ -1,0 +1,77 @@
+name: Release
+
+# The changesets release loop, publishing via npm Trusted Publishing (OIDC).
+#
+# On every push to main:
+#   • pending changesets → opens/updates the "Version Packages" PR
+#     (`changeset version`: bumps each package and writes CHANGELOGs via
+#     @changesets/changelog-github). Merging that PR is the release approval.
+#   • no pending changesets (i.e. the Version PR just merged) → publishes
+#     whatever is unpublished (`pnpm release`) and pushes the @pkg@x.y.z tags.
+#
+# The two packages version INDEPENDENTLY — no `fixed` group in .changeset/config.json,
+# because a plugin fix shouldn't bump the CLI.
+#
+# Auth: NO npm token anywhere. At publish, pnpm exchanges this job's GitHub OIDC
+# identity (this repo + this workflow file) for a short-lived npm credential. Each
+# package's Trusted Publisher on npmjs.com must name exactly:
+#   Amir-Abushanab / runcommand / release.yml
+# Provenance attestations are generated automatically on this path.
+
+on:
+  push:
+    branches: [main]
+    # The site and its screenshots ship nothing to npm, and they're the most frequently
+    # touched paths in this repo — skip the whole loop rather than run a no-op publish.
+    paths-ignore:
+      - "site/**"
+      - "assets/**"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write # version commit + release tags
+  pull-requests: write # open/update the Version Packages PR
+  id-token: write # mint the OIDC token npm exchanges at publish
+
+# One release flow at a time; let an in-flight publish finish rather than cancel it.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Version or publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # changesets reads history + tags to decide what to version/publish.
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6 # version comes from the root packageManager field
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Gate the publish on the suite. ci.yml runs on these same pushes but is a
+      # SEPARATE workflow with no dependency here, so without this step a red suite
+      # could still publish to npm — the one thing this pipeline does that can't be
+      # taken back.
+      - run: pnpm test
+
+      # Trusted publishing needs npm >= 11.5.1; the Node image may ship an older one.
+      - run: npm install -g npm@latest
+
+      - name: Version Packages PR / publish
+        uses: changesets/action@v1
+        with:
+          publish: pnpm release # changeset publish (creates the tags)
+          title: "chore: version packages"
+          commit: "chore: version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Version PR, tag push, changelog-github
+          NPM_CONFIG_PROVENANCE: "true"
