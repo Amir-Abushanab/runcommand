@@ -967,7 +967,7 @@ const BLOCK_HARNESSES = [
     key: "starship", label: "starship", file: STARSHIP_FILE,
     installed: () => !!findBin("starship") || exists(STARSHIP_FILE),
     already: (cur) => cur.includes("[custom.runcommand]"),
-    block: (self) => [
+    block: (self, win) => [
       "[custom.runcommand]",
       `command = ${JSON.stringify(self + " promptline")}`,
       // starship TRIMS a custom module's output, so promptline's own trailing space
@@ -976,7 +976,7 @@ const BLOCK_HARNESSES = [
       'format = "($output )"',
       // Pin the shell so a heavy interactive profile never runs once per prompt.
       // Windows has no bash to pin — omitting it lets starship use its cmd /C default.
-      ...(IS_WIN ? [] : ['shell = ["bash", "--noprofile", "--norc"]']),
+      ...(win ? [] : ['shell = ["bash", "--noprofile", "--norc"]']),
       "ignore_timeout = true", // promptline can outlast starship's 500ms global cap
     ],
     // Configs wired before the format fix squish the next segment (":4321took 10s").
@@ -989,17 +989,24 @@ const BLOCK_HARNESSES = [
     key: "tmux", label: "tmux", file: TMUX_FILE,
     installed: () => !!findBin("tmux") || exists(TMUX_FILE),
     already: (cur) => /status-right.*runcommand/.test(cur),
-    block: (self) => [`set -ga status-right " #(${self} prompt -C '#{pane_current_path}')"`],
+    block: (self, _win) => [`set -ga status-right " #(${self} prompt -C '#{pane_current_path}')"`],
   },
 ];
-function blockText(h) { return [MARK_BEGIN, ...h.block(selfInvocation()), MARK_END, ""].join("\n"); }
-// Content hash of each generated block with the invocation stubbed, so it's stable
-// across machines. Tests pin these against BLOCK_V: editing a block without bumping
-// the version is the one mistake that silently leaves every existing install on
-// stale config, and a package release can't undo it.
+function blockText(h) { return [MARK_BEGIN, ...h.block(selfInvocation(), IS_WIN), MARK_END, ""].join("\n"); }
+// Content hash of each generated block, invocation stubbed and platform passed in
+// rather than read from IS_WIN, so every runner produces the same numbers AND the
+// Windows variant gets checked on machines that can't run Windows. Tests pin these
+// against BLOCK_V: editing a block without bumping the version is the one mistake
+// that silently leaves every existing install on stale config, and a package
+// release can't undo it.
 function blockFingerprints() {
   const out = {};
-  for (const h of BLOCK_HARNESSES) out[h.key] = sha1(h.block("<self>").join("\n"));
+  for (const h of BLOCK_HARNESSES) {
+    out[h.key] = {
+      posix: sha1(h.block("<self>", false).join("\n")),
+      win32: sha1(h.block("<self>", true).join("\n")),
+    };
+  }
   return out;
 }
 function planBlock(h) {

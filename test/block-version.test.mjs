@@ -10,18 +10,27 @@
 // IF THIS TEST FAILS you changed a generated block. To resolve it:
 //   1. bump BLOCK_V in bin/runcommand.mjs,
 //   2. add an entry below for the new version (keep the old ones — they document
-//      what each version actually contained),
+//      what each version actually contained), covering both platform variants,
 //   3. `pnpm changeset` — minor or higher, and say "re-run `runcommand init`" in
 //      the note, since that's the only thing that delivers the fix.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { blockFingerprints, BLOCK_V } from "../bin/runcommand.mjs";
 
-// Invocation is stubbed as "<self>" in these hashes, so they're machine-independent.
+// Invocation is stubbed as "<self>", and the platform is passed to block() rather
+// than read from process.platform, so these are identical on every runner. Both
+// variants are pinned because the starship block genuinely differs — Windows has no
+// bash to pin — and the Windows one is the variant no local machine can produce.
 const FINGERPRINTS = {
   2: {
-    starship: "c739558482bbd9fb03201308e01268407f06899e",
-    tmux: "175bbf9f139946b21be245ad58bb00d247d747a7",
+    starship: {
+      posix: "c739558482bbd9fb03201308e01268407f06899e",
+      win32: "56c12111e49c085ba3cd1ba546c2487dfe6882d3",
+    },
+    tmux: {
+      posix: "175bbf9f139946b21be245ad58bb00d247d747a7",
+      win32: "175bbf9f139946b21be245ad58bb00d247d747a7",
+    },
   },
 };
 
