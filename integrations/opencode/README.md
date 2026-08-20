@@ -47,7 +47,7 @@ plugins):
 ```json
 {
   "$schema": "https://opencode.ai/tui.json",
-  "plugin": ["/absolute/path/to/runcommand/integrations/opencode"]
+  "plugin": ["/absolute/path/to/runcommand/integrations/opencode/tui"]
 }
 ```
 
@@ -62,8 +62,10 @@ setup, and a standalone install works as long as the CLI is installed too.
 `RUNCOMMAND_CMD` overrides both.
 
 Published as [`@amabush/runcommand-opencode`](https://www.npmjs.com/package/@amabush/runcommand-opencode),
-so `"plugin": ["@amabush/runcommand-opencode"]` works without a checkout — as long as the
-CLI (`@amabush/runcommand`) is installed too.
+so `"plugin": ["@amabush/runcommand-opencode/tui"]` works without a checkout — as long as
+the CLI (`@amabush/runcommand`) is installed too. **The `/tui` suffix is required** in both
+forms: `package.json` exports only `./tui`, so a bare package or directory path resolves
+nothing and OpenCode silently loads no plugin.
 
 ## Config (env)
 

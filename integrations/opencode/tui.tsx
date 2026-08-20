@@ -1,5 +1,13 @@
+/** @jsxImportSource @opentui/solid */
 /**
  * runcommand — OpenCode TUI plugin.
+ *
+ * The pragma above is load-bearing and must stay at the top of this file. The
+ * loader resolves `jsxImportSource` from the tsconfig it finds relative to its
+ * WORKING DIRECTORY, and OpenCode runs in the user's project — so tsconfig.json
+ * next to this file is never found, JSX compiles against React, and the import
+ * dies on `react/jsx-dev-runtime`. The slot then never registers and the footer
+ * renders nothing, with no error on screen. A per-file pragma is cwd-independent.
  *
  * OpenCode has no `statusLine` command setting; instead it lets a plugin render
  * Solid components into a named slot of the host layout. This registers a line in
@@ -12,8 +20,10 @@
  *
  * Register it in `~/.config/opencode/tui.json` — either the package, if installed
  * from npm, or this directory from a checkout:
- *   { "plugin": ["@amabush/runcommand-opencode"] }
- *   { "plugin": ["/absolute/path/to/runcommand/integrations/opencode"] }
+ *   { "plugin": ["@amabush/runcommand-opencode/tui"] }
+ *   { "plugin": ["/absolute/path/to/runcommand/integrations/opencode/tui"] }
+ * The "/tui" suffix is required: package.json exports only "./tui", so the bare
+ * package or directory resolves nothing and OpenCode loads no plugin at all.
  */
 import type { TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui";
 import type { JSX } from "@opentui/solid";
