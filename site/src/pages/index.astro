@@ -91,12 +91,19 @@ const terminals = [
 
 // Install command per package manager. pnpm leads because that's what this project
 // uses; the rest are here so nobody has to translate the flags themselves.
+//
+// The manager's name is shown by the dropdown, so the command line drops its leading
+// token and starts at the verb — "add -g …", not "pnpm add -g …". What gets COPIED is
+// still the whole thing, carried on data-cmd; only the display is trimmed.
 const packageManagers = [
   { id: "pnpm", label: "pnpm", cmd: "pnpm add -g @amabush/runcommand" },
   { id: "npm", label: "npm", cmd: "npm i -g @amabush/runcommand" },
   { id: "yarn", label: "yarn", cmd: "yarn global add @amabush/runcommand" },
   { id: "bun", label: "bun", cmd: "bun add -g @amabush/runcommand" },
 ];
+const fullCmd = (pm) => `${pm.cmd} && runcommand init`;
+/** The same command minus its leading manager token, which the dropdown already shows. */
+const shownCmd = (pm) => `${pm.cmd.split(" ").slice(1).join(" ")} && runcommand init`;
 
 const installNote = `<code>init</code> finds supported tools, updates their config, and backs up changed files. It needs Node and one supported AI CLI for detection. <a href="${repo}" rel="noopener">Read the setup guide &rarr;</a>`;
 
@@ -186,13 +193,13 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
                    which is the intended fallback. -->
               <button type="button"><selectedcontent></selectedcontent></button>
               {packageManagers.map((pm) => (
-                <option value={pm.id} selected={pm.id === "pnpm"} data-cmd={`${pm.cmd} && runcommand init`}>
+                <option value={pm.id} selected={pm.id === "pnpm"} data-cmd={fullCmd(pm)} data-cmd-shown={shownCmd(pm)}>
                   <svg class="pm-logo" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><use href={`${base}/logos/command-logos.svg#${pm.id}`}></use></svg>
                   <span>{pm.label}</span>
                 </option>
               ))}
             </select>
-            <code id="install-cmd">pnpm add -g @amabush/runcommand &amp;&amp; runcommand init</code>
+            <code id="install-cmd" data-full={fullCmd(packageManagers[0])}>{shownCmd(packageManagers[0])}</code>
             <button class="copy" type="button" data-copy-target="install-cmd" aria-label="Copy command">Copy</button>
           </div>
           <p class="install-note" set:html={installNote}></p>
@@ -425,7 +432,9 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
         const el = document.getElementById(btn.getAttribute("data-copy-target"));
         if (!el) return;
         try {
-          await navigator.clipboard.writeText(el.textContent.trim());
+          // data-full carries the complete command when the display is abbreviated
+          // (the install line hides the manager token, which the dropdown shows).
+          await navigator.clipboard.writeText((el.dataset.full ?? el.textContent).trim());
           const prev = btn.textContent;
           btn.textContent = "Copied ✓";
           setTimeout(() => (btn.textContent = prev), 1400);
@@ -435,8 +444,9 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
   </script>
 
   <script is:inline>
-    // Package-manager picker: swap the shown command, remember the choice. The copy
-    // button reads textContent, so it follows along with no extra wiring.
+    // Package-manager picker: swap the shown command, remember the choice. The visible
+    // text omits the manager token (the dropdown shows it); data-full keeps the whole
+    // command so the copy button still yields something runnable.
     (function () {
       const select = document.getElementById("pm-select");
       const out = document.getElementById("install-cmd");
@@ -444,7 +454,9 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
       const KEY = "runcommand:pm";
       const apply = () => {
         const opt = select.selectedOptions[0];
-        if (opt && opt.dataset.cmd) out.textContent = opt.dataset.cmd;
+        if (!opt || !opt.dataset.cmd) return;
+        out.textContent = opt.dataset.cmdShown ?? opt.dataset.cmd;
+        out.dataset.full = opt.dataset.cmd;
       };
       try {
         const saved = localStorage.getItem(KEY);
