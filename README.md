@@ -257,9 +257,9 @@ renamed to `options` upstream):
 
 **OpenCode** — no status-line command, but it loads TUI plugins: a ready-made one in
 [`integrations/opencode/`](integrations/opencode/) renders the command + ports into the
-footer. Register it in `~/.config/opencode/tui.json` as
-`"@amabush/runcommand-opencode/tui"` — the `/tui` suffix is required, since that's the
-only path the package exports. See its README to install.
+footer. `npm i @amabush/runcommand-opencode` inside `~/.config/opencode`, then point
+`tui.json` at the installed `dist/tui.js` by **path** — OpenCode resolves plugin
+specifiers from your project, so a package name is never found. See its README.
 
 **Codex** — no command-backed status line yet
 ([openai/codex#17827](https://github.com/openai/codex/issues/17827)). Its contract is Claude

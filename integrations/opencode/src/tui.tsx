@@ -20,10 +20,13 @@
  *
  * Register it in `~/.config/opencode/tui.json` — either the package, if installed
  * from npm, or this directory from a checkout:
- *   { "plugin": ["@amabush/runcommand-opencode/tui"] }
- *   { "plugin": ["/absolute/path/to/runcommand/integrations/opencode/tui"] }
- * The "/tui" suffix is required: package.json exports only "./tui", so the bare
- * package or directory resolves nothing and OpenCode loads no plugin at all.
+ *   { "plugin": ["~/.config/opencode/node_modules/@amabush/runcommand-opencode/dist/tui.js"] }
+ *   { "plugin": ["/absolute/path/to/runcommand/integrations/opencode/dist/tui.js"] }
+ * Register a FILE PATH, not a package name. OpenCode resolves plugin specifiers from
+ * the project it is running in, not from ~/.config/opencode, so an installed package
+ * is not on the resolution path and simply isn't found — with no error, just no
+ * plugin. The path must end at dist/tui.js: `exports` maps "./tui" to it, but exports
+ * only apply to package specifiers, never to paths.
  */
 import type { TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui";
 import type { JSX } from "@opentui/solid";

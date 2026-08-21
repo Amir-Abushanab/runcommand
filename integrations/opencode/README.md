@@ -42,12 +42,14 @@ bun install            # in the plugin directory
 bun run build          # bundles tui.tsx -> dist/tui.js
 ```
 
-**A filesystem path must point at `dist/tui.js`, not the directory.** `exports` only
-applies to package specifiers — a path gets plain file resolution, so
-`.../integrations/opencode/tui` would load `tui.tsx` **source**, unbundled, with the dead
-server build of Solid. That's why the source now lives in `src/`: the shorter path fails
-loudly instead of silently loading the wrong file. Installed from npm, the package form
-`@amabush/runcommand-opencode/tui` goes through `exports` and lands on the bundle.
+**Register a path that ends at `dist/tui.js`.** Two traps, both silent:
+
+- **A package name doesn't work.** OpenCode resolves plugin specifiers from the project
+  it's running in, not from `~/.config/opencode`, so `@amabush/runcommand-opencode/tui`
+  isn't on the resolution path and is simply never found — no error, no plugin.
+- **The path must reach the file.** `exports` maps `./tui` to the bundle, but exports
+  apply to package specifiers only, never to paths; a path stops at plain file
+  resolution.
 
 **The build is required, not optional.** `dist/` is what `exports` points at, and it
 isn't committed. It also isn't just a compile step: the bundle is produced with
@@ -92,10 +94,18 @@ setup, and a standalone install works as long as the CLI is installed too.
 `RUNCOMMAND_CMD` overrides both.
 
 Published as [`@amabush/runcommand-opencode`](https://www.npmjs.com/package/@amabush/runcommand-opencode),
-so `"plugin": ["@amabush/runcommand-opencode/tui"]` works without a checkout — as long as
-the CLI (`@amabush/runcommand`) is installed too. **The `/tui` suffix is required** in both
-forms: `package.json` exports only `./tui`, so a bare package or directory path resolves
-nothing and OpenCode silently loads no plugin.
+so it can be installed without a checkout — as long as the CLI
+(`@amabush/runcommand`) is installed too:
+
+```sh
+cd ~/.config/opencode && npm i @amabush/runcommand-opencode
+```
+
+Then point `tui.json` at the installed file, **not** at the package name:
+
+```json
+{ "plugin": ["/Users/you/.config/opencode/node_modules/@amabush/runcommand-opencode/dist/tui.js"] }
+```
 
 ## Config (env)
 
