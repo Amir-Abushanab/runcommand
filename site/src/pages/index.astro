@@ -185,35 +185,28 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
               View on GitHub
             </a>
           </div>
+          {/* A segmented switcher, not a dropdown. Three attempts at a styled <select>
+              all foundered on the same thing: the parts of a select that can carry a
+              brand mark are Chromium-only, and the transparent-overlay trick that works
+              around it puts an element on top of the label, which is exactly what stops
+              the text being selectable. Radios have none of those problems — real
+              keyboard support, no overlay, and the labels are ordinary selectable text.
+              Stacking them above the command also gives the command the full width. */}
+          <fieldset class="pm-tabs">
+            <legend class="sr-only">Package manager</legend>
+            {packageManagers.map((pm, i) => (
+              <>
+                <input class="sr-only pm-radio" type="radio" name="pm" id={`pm-${pm.id}`} value={pm.id} checked={i === 0} data-cmd={fullCmd(pm)} data-cmd-shown={shownCmd(pm)} />
+                <label class="pm-tab" for={`pm-${pm.id}`}>
+                  <svg class="pm-logo" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><use href={`${base}/logos/command-logos.svg#${pm.id}`}></use></svg>
+                  <span>{pm.label}</span>
+                </label>
+              </>
+            ))}
+          </fieldset>
           <div class="install">
-            <label class="sr-only" for="pm-select">Package manager</label>
-            <span class="pm-picker">
-              {/* The visible trigger. `appearance: base-select` can style the real select
-                  and clone the chosen option into <selectedcontent>, mark and all — but
-                  only in Chromium. Everywhere else a native select renders text only, so
-                  the brand mark would simply never appear. This face is what carries it
-                  there; the native select sits on top of it, transparent, so the control
-                  is still a real select for keyboard, mobile and assistive tech. */}
-              <span class="pm-face" aria-hidden="true">
-                <svg class="pm-logo" id="pm-face-logo" viewBox="0 0 24 24" width="14" height="14"><use href={`${base}/logos/command-logos.svg#${packageManagers[0].id}`}></use></svg>
-                <span id="pm-face-label">{packageManagers[0].label}</span>
-                <svg class="pm-face-caret" viewBox="0 0 10 6" width="9" height="6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              </span>
-            {/* A plain native select — nothing but <option>s inside it. An earlier
-                version nested <button><selectedcontent> to opt into
-                `appearance: base-select`, which renders the mark inside the control
-                itself; that is Chromium-only, and browsers disagree about what to do
-                with the extra markup, which showed up in WebKit as the label drawn
-                twice, overlapping. The mark now lives in .pm-face for every browser
-                and this stays a stock select. */}
-            <select id="pm-select" class="pm-select">
-              {packageManagers.map((pm) => (
-                <option value={pm.id} selected={pm.id === "pnpm"} data-cmd={fullCmd(pm)} data-cmd-shown={shownCmd(pm)}>{pm.label}</option>
-              ))}
-            </select>
-            </span>
             <code id="install-cmd" data-full={fullCmd(packageManagers[0])}>{shownCmd(packageManagers[0])}</code>
-            <button class="copy" type="button" data-copy-target="install-cmd" aria-label="Copy command">Copy</button>
+            <button class="copy" type="button" data-copy-target="install-cmd" aria-label="Copy install command">Copy</button>
           </div>
           <p class="install-note" set:html={installNote}></p>
         </div>
@@ -457,52 +450,30 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
   </script>
 
   <script is:inline>
-    // Package-manager picker: swap the shown command, remember the choice. The visible
-    // text omits the manager token (the dropdown shows it); data-full keeps the whole
-    // command so the copy button still yields something runnable.
+    // Package-manager switcher: swap the shown command, remember the choice. The
+    // visible text omits the manager token (the switcher shows it); data-full keeps the
+    // whole command so the copy button still yields something runnable.
     (function () {
-      const select = document.getElementById("pm-select");
+      const radios = [...document.querySelectorAll(".pm-radio")];
       const out = document.getElementById("install-cmd");
-      const face = document.querySelector(".pm-face");
-      // Only lift the face above the select if we can open the menu without it.
-      if (face && typeof HTMLSelectElement.prototype.showPicker === "function") {
-        document.documentElement.classList.add("pm-openable");
-        face.addEventListener("mousedown", (e) => {
-          // The caret is the affordance; elsewhere on the pill, let the drag select text.
-          if (!e.target.closest(".pm-face-caret") && !e.altKey) return;
-          e.preventDefault();
-          try { select.showPicker(); } catch { select.focus(); }
-        });
-        face.addEventListener("click", (e) => {
-          // A plain click (no text selected) still opens it — a drag-select does not.
-          if (!window.getSelection().isCollapsed) return;
-          if (e.detail > 1) return; // double-click selects a word; don't fight it
-          try { select.showPicker(); } catch { select.focus(); }
-        });
-      }
-      const LOGOS = document.querySelector("#pm-face-logo use")?.getAttribute("href")?.split("#")[0] ?? "";
-      if (!select || !out) return;
+      if (radios.length === 0 || !out) return;
       const KEY = "runcommand:pm";
       const apply = () => {
-        const opt = select.selectedOptions[0];
-        if (!opt || !opt.dataset.cmd) return;
-        out.textContent = opt.dataset.cmdShown ?? opt.dataset.cmd;
-        out.dataset.full = opt.dataset.cmd;
-        // Keep the fallback trigger face in step; it is the only mark WebKit shows.
-        const faceLogo = document.querySelector("#pm-face-logo use");
-        const faceLabel = document.getElementById("pm-face-label");
-        if (faceLogo) faceLogo.setAttribute("href", `${LOGOS}#${opt.value}`);
-        if (faceLabel) faceLabel.textContent = opt.textContent.trim();
+        const on = radios.find((r) => r.checked);
+        if (!on) return;
+        out.textContent = on.dataset.cmdShown ?? on.dataset.cmd;
+        out.dataset.full = on.dataset.cmd;
       };
       try {
         const saved = localStorage.getItem(KEY);
-        if (saved && [...select.options].some((o) => o.value === saved)) select.value = saved;
+        const match = saved && radios.find((r) => r.value === saved);
+        if (match) match.checked = true;
       } catch {}
       apply();
-      select.addEventListener("change", () => {
+      radios.forEach((r) => r.addEventListener("change", () => {
         apply();
-        try { localStorage.setItem(KEY, select.value); } catch {}
-      });
+        try { localStorage.setItem(KEY, r.value); } catch {}
+      }));
     })();
 
     // Escape closes an open hint without moving the pointer or focus, which the
@@ -663,37 +634,24 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
       position: absolute; inline-size: 1px; block-size: 1px; padding: 0; margin: -1px;
       overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
     }
-    /* Package-manager picker. */
-    /* The select is the real control but is invisible: it sits over .pm-face, which is
-       what you actually see. One code path in every browser. */
-    .pm-select { font: 600 0.8rem/1 var(--font); cursor: pointer; }
-    .pm-logo { inline-size: 1em; block-size: 1em; flex: none; }
-    /* Default path (WebKit, Firefox): our own trigger face, with the native select laid
-       over it at zero opacity so every native behaviour still works. */
-    .pm-picker { position: relative; display: inline-flex; flex: none; }
-    .pm-face {
-      display: inline-flex; align-items: center; gap: 0.4rem;
-      font: 600 0.8rem/1 var(--font); color: var(--text);
-      background: var(--surface-2); border: 1px solid var(--border);
-      border-radius: 7px; padding: 0.42rem 0.5rem; white-space: nowrap;
+    /* Package-manager switcher: radios styled as tabs. The label text is ordinary
+       selectable text — nothing is layered over it. */
+    .pm-tabs {
+      display: inline-flex; gap: 2px; margin: 0 0 0.5rem; padding: 2px;
+      border: 1px solid var(--border); border-radius: 9px; background: var(--surface-2);
     }
-    .pm-face .pm-logo { inline-size: 1.15em; block-size: 1.15em; }
-    .pm-face-caret { color: var(--muted); flex: none; }
-    /* The native focus ring lands on an invisible element, so pass it to the face. */
-    .pm-picker:has(.pm-select:focus-visible) .pm-face {
-      outline: 2px solid var(--accent, #38bdf8); outline-offset: 2px;
+    .pm-tab {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      padding: 0.3rem 0.55rem; border-radius: 7px; white-space: nowrap;
+      font: 600 0.78rem/1 var(--font); color: var(--muted); cursor: pointer;
+      /* WebKit sets user-select: none on form controls; the point of this switcher is
+         that the name can be highlighted, so say so explicitly. */
+      user-select: text; -webkit-user-select: text;
     }
-    .pm-picker .pm-select {
-      position: absolute; inset: 0; inline-size: 100%; block-size: 100%;
-      opacity: 0; cursor: pointer; padding: 0; border: 0;
-    }
-    /* By default the invisible select is on top, which is what makes the pill clickable
-       — and also what stops you selecting the label under it. Where showPicker() exists
-       we can open the menu ourselves, so the face goes on top instead and its text
-       becomes selectable like any other text on the page. Set from JS after a feature
-       check, so a browser without showPicker keeps the click and loses nothing. */
-    html.pm-openable .pm-face { position: relative; z-index: 1; user-select: text; -webkit-user-select: text; cursor: default; }
-    html.pm-openable .pm-face-caret { cursor: pointer; }
+    .pm-tab .pm-logo { inline-size: 1.1em; block-size: 1.1em; }
+    .pm-radio:checked + .pm-tab { background: var(--surface); color: var(--text); }
+    .pm-radio:focus-visible + .pm-tab { outline: 2px solid var(--accent, #38bdf8); outline-offset: 2px; }
+    @media (hover: hover) { .pm-tab:hover { color: var(--text); } }
     /* Inline hint. Deliberately not popover/interestfor: interest invokers are
        Chrome-only and need a polyfill, which is more machinery than one decorative
        hint on a static page is worth. Hover covers pointers, :focus-visible covers
