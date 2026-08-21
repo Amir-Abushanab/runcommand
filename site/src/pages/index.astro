@@ -463,6 +463,23 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
     (function () {
       const select = document.getElementById("pm-select");
       const out = document.getElementById("install-cmd");
+      const face = document.querySelector(".pm-face");
+      // Only lift the face above the select if we can open the menu without it.
+      if (face && typeof HTMLSelectElement.prototype.showPicker === "function") {
+        document.documentElement.classList.add("pm-openable");
+        face.addEventListener("mousedown", (e) => {
+          // The caret is the affordance; elsewhere on the pill, let the drag select text.
+          if (!e.target.closest(".pm-face-caret") && !e.altKey) return;
+          e.preventDefault();
+          try { select.showPicker(); } catch { select.focus(); }
+        });
+        face.addEventListener("click", (e) => {
+          // A plain click (no text selected) still opens it — a drag-select does not.
+          if (!window.getSelection().isCollapsed) return;
+          if (e.detail > 1) return; // double-click selects a word; don't fight it
+          try { select.showPicker(); } catch { select.focus(); }
+        });
+      }
       const LOGOS = document.querySelector("#pm-face-logo use")?.getAttribute("href")?.split("#")[0] ?? "";
       if (!select || !out) return;
       const KEY = "runcommand:pm";
@@ -670,6 +687,13 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
       position: absolute; inset: 0; inline-size: 100%; block-size: 100%;
       opacity: 0; cursor: pointer; padding: 0; border: 0;
     }
+    /* By default the invisible select is on top, which is what makes the pill clickable
+       — and also what stops you selecting the label under it. Where showPicker() exists
+       we can open the menu ourselves, so the face goes on top instead and its text
+       becomes selectable like any other text on the page. Set from JS after a feature
+       check, so a browser without showPicker keeps the click and loses nothing. */
+    html.pm-openable .pm-face { position: relative; z-index: 1; user-select: text; -webkit-user-select: text; cursor: default; }
+    html.pm-openable .pm-face-caret { cursor: pointer; }
     /* Inline hint. Deliberately not popover/interestfor: interest invokers are
        Chrome-only and need a polyfill, which is more machinery than one decorative
        hint on a static page is worth. Hover covers pointers, :focus-visible covers
