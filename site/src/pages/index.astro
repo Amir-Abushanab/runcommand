@@ -187,6 +187,18 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
           </div>
           <div class="install">
             <label class="sr-only" for="pm-select">Package manager</label>
+            <span class="pm-picker">
+              {/* The visible trigger. `appearance: base-select` can style the real select
+                  and clone the chosen option into <selectedcontent>, mark and all — but
+                  only in Chromium. Everywhere else a native select renders text only, so
+                  the brand mark would simply never appear. This face is what carries it
+                  there; the native select sits on top of it, transparent, so the control
+                  is still a real select for keyboard, mobile and assistive tech. */}
+              <span class="pm-face" aria-hidden="true">
+                <svg class="pm-logo" id="pm-face-logo" viewBox="0 0 24 24" width="14" height="14"><use href={`${base}/logos/command-logos.svg#${packageManagers[0].id}`}></use></svg>
+                <span id="pm-face-label">{packageManagers[0].label}</span>
+                <svg class="pm-face-caret" viewBox="0 0 10 6" width="9" height="6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
             <select id="pm-select" class="pm-select">
               <!-- Only rendered where `appearance: base-select` is supported. Other
                    browsers drop it at parse time and show a plain native select,
@@ -199,6 +211,7 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
                 </option>
               ))}
             </select>
+            </span>
             <code id="install-cmd" data-full={fullCmd(packageManagers[0])}>{shownCmd(packageManagers[0])}</code>
             <button class="copy" type="button" data-copy-target="install-cmd" aria-label="Copy command">Copy</button>
           </div>
@@ -450,6 +463,7 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
     (function () {
       const select = document.getElementById("pm-select");
       const out = document.getElementById("install-cmd");
+      const LOGOS = document.querySelector("#pm-face-logo use")?.getAttribute("href")?.split("#")[0] ?? "";
       if (!select || !out) return;
       const KEY = "runcommand:pm";
       const apply = () => {
@@ -457,6 +471,11 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
         if (!opt || !opt.dataset.cmd) return;
         out.textContent = opt.dataset.cmdShown ?? opt.dataset.cmd;
         out.dataset.full = opt.dataset.cmd;
+        // Keep the fallback trigger face in step; it is the only mark WebKit shows.
+        const faceLogo = document.querySelector("#pm-face-logo use");
+        const faceLabel = document.getElementById("pm-face-label");
+        if (faceLogo) faceLogo.setAttribute("href", `${LOGOS}#${opt.value}`);
+        if (faceLabel) faceLabel.textContent = opt.textContent.trim();
       };
       try {
         const saved = localStorage.getItem(KEY);
@@ -636,7 +655,26 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
       border-radius: 7px; padding: 0.42rem 0.5rem;
     }
     .pm-logo { inline-size: 1em; block-size: 1em; flex: none; }
+    /* Default path (WebKit, Firefox): our own trigger face, with the native select laid
+       over it at zero opacity so every native behaviour still works. */
+    .pm-picker { position: relative; display: inline-flex; flex: none; }
+    .pm-face {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      font: 600 0.8rem/1 var(--font); color: var(--text);
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 7px; padding: 0.42rem 0.5rem; white-space: nowrap;
+    }
+    .pm-face .pm-logo { inline-size: 1.15em; block-size: 1.15em; }
+    .pm-face-caret { color: var(--muted); flex: none; }
+    .pm-picker .pm-select {
+      position: absolute; inset: 0; inline-size: 100%; block-size: 100%;
+      opacity: 0; cursor: pointer; padding: 0; border: 0;
+    }
     @supports (appearance: base-select) {
+      /* Chromium can style the real select, so the face steps aside and the open list
+         carries a mark per option too. */
+      .pm-face { display: none; }
+      .pm-picker .pm-select { position: static; inline-size: auto; block-size: auto; opacity: 1; }
       .pm-select, .pm-select::picker(select) { appearance: base-select; }
       .pm-select { display: inline-flex; align-items: center; gap: 0.3rem; }
       /* base-select puts the trigger in a nested <button> and clones the chosen
@@ -648,10 +686,10 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
       }
       .pm-select selectedcontent { display: flex; align-items: center; gap: 0.4rem; white-space: nowrap; }
       .pm-select selectedcontent .pm-logo { inline-size: 1.15em; block-size: 1.15em; }
-      /* The command sits immediately to the right and already begins with the
-         manager's name, so the trigger carries the mark alone. The label stays in the
-         open list, in the accessible name, and in the fallback native select — where
-         there is no command text to lean on. */
+      /* The mark alone identifies the manager on the trigger; the label stays in the
+         open list and in the accessible name. (The command to the right no longer
+         repeats the manager's name, so this is the only place it is shown visually —
+         which is why the fallback face keeps the label beside its mark.) */
       .pm-select selectedcontent span { display: none; }
       .pm-select { padding-inline: 0.5rem 0.4rem; }
       .pm-select::picker-icon { color: var(--muted); transition: rotate 0.15s ease; }
