@@ -91,10 +91,6 @@ const terminals = [
 
 // Install command per package manager. pnpm leads because that's what this project
 // uses; the rest are here so nobody has to translate the flags themselves.
-//
-// The manager's name is shown by the dropdown, so the command line drops its leading
-// token and starts at the verb — "add -g …", not "pnpm add -g …". What gets COPIED is
-// still the whole thing, carried on data-cmd; only the display is trimmed.
 const packageManagers = [
   { id: "pnpm", label: "pnpm", cmd: "pnpm add -g @amabush/runcommand" },
   { id: "npm", label: "npm", cmd: "npm i -g @amabush/runcommand" },
@@ -102,8 +98,6 @@ const packageManagers = [
   { id: "bun", label: "bun", cmd: "bun add -g @amabush/runcommand" },
 ];
 const fullCmd = (pm) => `${pm.cmd} && runcommand init`;
-/** The same command minus its leading manager token, which the dropdown already shows. */
-const shownCmd = (pm) => `${pm.cmd.split(" ").slice(1).join(" ")} && runcommand init`;
 
 const installNote = `<code>init</code> finds supported tools, updates their config, and backs up changed files. It needs Node and one supported AI CLI for detection. <a href="${repo}" rel="noopener">Read the setup guide &rarr;</a>`;
 
@@ -185,32 +179,24 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
               View on GitHub
             </a>
           </div>
-          {/* A segmented switcher, not a dropdown. Three attempts at a styled <select>
-              all foundered on the same thing: the parts of a select that can carry a
-              brand mark are Chromium-only, and the transparent-overlay trick that works
-              around it puts an element on top of the label, which is exactly what stops
-              the text being selectable. Radios have none of those problems — real
-              keyboard support, no overlay, and the names are ordinary selectable text.
-              The tab is a <span> rather than a <label> on purpose: a label activates its
-              control on mousedown, which cancels the drag — so its text cannot be
-              highlighted no matter what user-select says. Clicks are wired in JS, which
-              costs nothing here because swapping the command is JS anyway; the radios
-              stay for state and for native arrow-key navigation.
-              Stacking them above the command also gives the command the full width. */}
+          {/* A segmented switcher, not a dropdown: the parts of a <select> that can carry
+              a brand mark are Chromium-only. Radios styled as tabs need no overlay and
+              keep native keyboard support. Sitting above the command rather than beside
+              it, they leave room for the command to be shown in full. */}
           <fieldset class="pm-tabs">
             <legend class="sr-only">Package manager</legend>
             {packageManagers.map((pm, i) => (
               <>
-                <input class="sr-only pm-radio" type="radio" name="pm" id={`pm-${pm.id}`} value={pm.id} checked={i === 0} data-cmd={fullCmd(pm)} data-cmd-shown={shownCmd(pm)} />
-                <span class="pm-tab" data-radio={`pm-${pm.id}`}>
+                <input class="sr-only pm-radio" type="radio" name="pm" id={`pm-${pm.id}`} value={pm.id} checked={i === 0} data-cmd={fullCmd(pm)} />
+                <label class="pm-tab" for={`pm-${pm.id}`}>
                   <svg class="pm-logo" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><use href={`${base}/logos/command-logos.svg#${pm.id}`}></use></svg>
-                  <span class="pm-tab-name">{pm.label}</span>
-                </span>
+                  <span>{pm.label}</span>
+                </label>
               </>
             ))}
           </fieldset>
           <div class="install">
-            <code id="install-cmd" data-full={fullCmd(packageManagers[0])}>{shownCmd(packageManagers[0])}</code>
+            <code id="install-cmd">{fullCmd(packageManagers[0])}</code>
             <button class="copy" type="button" data-copy-target="install-cmd" aria-label="Copy install command">Copy</button>
           </div>
           <p class="install-note" set:html={installNote}></p>
@@ -443,8 +429,6 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
         const el = document.getElementById(btn.getAttribute("data-copy-target"));
         if (!el) return;
         try {
-          // data-full carries the complete command when the display is abbreviated
-          // (the install line hides the manager token, which the dropdown shows).
           await navigator.clipboard.writeText((el.dataset.full ?? el.textContent).trim());
           const prev = btn.textContent;
           btn.textContent = "Copied ✓";
@@ -455,9 +439,7 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
   </script>
 
   <script is:inline>
-    // Package-manager switcher: swap the shown command, remember the choice. The
-    // visible text omits the manager token (the switcher shows it); data-full keeps the
-    // whole command so the copy button still yields something runnable.
+    // Package-manager switcher: swap the command, remember the choice.
     (function () {
       const radios = [...document.querySelectorAll(".pm-radio")];
       const out = document.getElementById("install-cmd");
@@ -466,8 +448,7 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
       const apply = () => {
         const on = radios.find((r) => r.checked);
         if (!on) return;
-        out.textContent = on.dataset.cmdShown ?? on.dataset.cmd;
-        out.dataset.full = on.dataset.cmd;
+        out.textContent = on.dataset.cmd;
       };
       try {
         const saved = localStorage.getItem(KEY);
@@ -479,18 +460,6 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
         apply();
         try { localStorage.setItem(KEY, r.value); } catch {}
       }));
-      // The tabs are spans, so their clicks are wired here (see the markup comment).
-      document.querySelectorAll(".pm-tab").forEach((tab) => {
-        tab.addEventListener("click", () => {
-          // A drag that left a selection was someone highlighting the name, not switching.
-          if (!window.getSelection().isCollapsed) return;
-          const radio = document.getElementById(tab.dataset.radio);
-          if (radio && !radio.checked) {
-            radio.checked = true;
-            radio.dispatchEvent(new Event("change", { bubbles: true }));
-          }
-        });
-      });
     })();
 
     // Escape closes an open hint without moving the pointer or focus, which the
@@ -661,13 +630,14 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
       display: inline-flex; align-items: center; gap: 0.35rem;
       padding: 0.3rem 0.55rem; border-radius: 7px; white-space: nowrap;
       font: 600 0.78rem/1 var(--font); color: var(--muted); cursor: pointer;
-      /* WebKit sets user-select: none on form controls; the point of this switcher is
-         that the name can be highlighted, so say so explicitly. */
-      user-select: text; -webkit-user-select: text;
     }
-    .pm-tab .pm-logo { inline-size: 1.1em; block-size: 1.1em; }
-    .pm-tab-name { cursor: text; }
+    /* Unselected marks are desaturated so the chosen one reads at a glance; the label
+       carries the same distinction in colour. */
+    .pm-tab .pm-logo { inline-size: 1.1em; block-size: 1.1em; filter: grayscale(1); opacity: 0.5; transition: filter 0.12s ease, opacity 0.12s ease; }
+    .pm-radio:checked + .pm-tab .pm-logo { filter: none; opacity: 1; }
+    @media (hover: hover) { .pm-tab:hover .pm-logo { opacity: 0.8; } }
     .pm-radio:checked + .pm-tab { background: var(--surface); color: var(--text); }
+    .pm-radio:checked + .pm-tab .pm-logo { filter: none; opacity: 1; }
     .pm-radio:focus-visible + .pm-tab { outline: 2px solid var(--accent, #38bdf8); outline-offset: 2px; }
     @media (hover: hover) { .pm-tab:hover { color: var(--text); } }
     /* Inline hint. Deliberately not popover/interestfor: interest invokers are
