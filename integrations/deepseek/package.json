@@ -1,6 +1,7 @@
 {
   "name": "@amabush/runcommand-dsh",
   "version": "0.1.0",
+  "private": true,
   "description": "DeepSeek Harness plugin: the project's run command + clickable live localhost ports as an ambient row under the composer (powered by runcommand).",
   "type": "module",
   "exports": {
