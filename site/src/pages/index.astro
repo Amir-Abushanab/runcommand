@@ -199,16 +199,16 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
                 <span id="pm-face-label">{packageManagers[0].label}</span>
                 <svg class="pm-face-caret" viewBox="0 0 10 6" width="9" height="6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
               </span>
+            {/* A plain native select — nothing but <option>s inside it. An earlier
+                version nested <button><selectedcontent> to opt into
+                `appearance: base-select`, which renders the mark inside the control
+                itself; that is Chromium-only, and browsers disagree about what to do
+                with the extra markup, which showed up in WebKit as the label drawn
+                twice, overlapping. The mark now lives in .pm-face for every browser
+                and this stays a stock select. */}
             <select id="pm-select" class="pm-select">
-              <!-- Only rendered where `appearance: base-select` is supported. Other
-                   browsers drop it at parse time and show a plain native select,
-                   which is the intended fallback. -->
-              <button type="button"><selectedcontent></selectedcontent></button>
               {packageManagers.map((pm) => (
-                <option value={pm.id} selected={pm.id === "pnpm"} data-cmd={fullCmd(pm)} data-cmd-shown={shownCmd(pm)}>
-                  <svg class="pm-logo" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><use href={`${base}/logos/command-logos.svg#${pm.id}`}></use></svg>
-                  <span>{pm.label}</span>
-                </option>
+                <option value={pm.id} selected={pm.id === "pnpm"} data-cmd={fullCmd(pm)} data-cmd-shown={shownCmd(pm)}>{pm.label}</option>
               ))}
             </select>
             </span>
@@ -646,14 +646,10 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
       position: absolute; inline-size: 1px; block-size: 1px; padding: 0; margin: -1px;
       overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
     }
-    /* Package-manager picker. Where `appearance: base-select` is supported each option
-       carries its brand mark; where it isn't, this is a plain native select showing the
-       labels — the icons are the enhancement, the choice always works. */
-    .pm-select {
-      flex: none; font: 600 0.8rem/1 var(--font); color: var(--text); cursor: pointer;
-      background: var(--surface-2); border: 1px solid var(--border);
-      border-radius: 7px; padding: 0.42rem 0.5rem;
-    }
+    /* Package-manager picker. */
+    /* The select is the real control but is invisible: it sits over .pm-face, which is
+       what you actually see. One code path in every browser. */
+    .pm-select { font: 600 0.8rem/1 var(--font); cursor: pointer; }
     .pm-logo { inline-size: 1em; block-size: 1em; flex: none; }
     /* Default path (WebKit, Firefox): our own trigger face, with the native select laid
        over it at zero opacity so every native behaviour still works. */
@@ -666,46 +662,13 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
     }
     .pm-face .pm-logo { inline-size: 1.15em; block-size: 1.15em; }
     .pm-face-caret { color: var(--muted); flex: none; }
+    /* The native focus ring lands on an invisible element, so pass it to the face. */
+    .pm-picker:has(.pm-select:focus-visible) .pm-face {
+      outline: 2px solid var(--accent, #38bdf8); outline-offset: 2px;
+    }
     .pm-picker .pm-select {
       position: absolute; inset: 0; inline-size: 100%; block-size: 100%;
       opacity: 0; cursor: pointer; padding: 0; border: 0;
-    }
-    @supports (appearance: base-select) {
-      /* Chromium can style the real select, so the face steps aside and the open list
-         carries a mark per option too. */
-      .pm-face { display: none; }
-      .pm-picker .pm-select { position: static; inline-size: auto; block-size: auto; opacity: 1; }
-      .pm-select, .pm-select::picker(select) { appearance: base-select; }
-      .pm-select { display: inline-flex; align-items: center; gap: 0.3rem; }
-      /* base-select puts the trigger in a nested <button> and clones the chosen
-         option into <selectedcontent>; both need to be flex rows or the mark stacks
-         above its label. */
-      .pm-select button {
-        display: flex; align-items: center; gap: 0.4rem;
-        padding: 0; border: 0; background: none; color: inherit; font: inherit;
-      }
-      .pm-select selectedcontent { display: flex; align-items: center; gap: 0.4rem; white-space: nowrap; }
-      .pm-select selectedcontent .pm-logo { inline-size: 1.15em; block-size: 1.15em; }
-      /* The mark alone identifies the manager on the trigger; the label stays in the
-         open list and in the accessible name. (The command to the right no longer
-         repeats the manager's name, so this is the only place it is shown visually —
-         which is why the fallback face keeps the label beside its mark.) */
-      .pm-select selectedcontent span { display: none; }
-      .pm-select { padding-inline: 0.5rem 0.4rem; }
-      .pm-select::picker-icon { color: var(--muted); transition: rotate 0.15s ease; }
-      .pm-select:open::picker-icon { rotate: 180deg; }
-      .pm-select option {
-        display: flex; align-items: center; gap: 0.5rem;
-        padding: 0.4rem 0.6rem; border-radius: 6px;
-      }
-      .pm-select option:checked { background: var(--surface-2); }
-      .pm-select::picker(select) {
-        margin-block-start: 0.3rem; padding: 0.25rem; border-radius: 9px;
-        background: var(--surface); border: 1px solid var(--border);
-      }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .pm-select::picker-icon { transition: none; }
     }
     /* Inline hint. Deliberately not popover/interestfor: interest invokers are
        Chrome-only and need a polyfill, which is more machinery than one decorative
