@@ -190,17 +190,22 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
               brand mark are Chromium-only, and the transparent-overlay trick that works
               around it puts an element on top of the label, which is exactly what stops
               the text being selectable. Radios have none of those problems — real
-              keyboard support, no overlay, and the labels are ordinary selectable text.
+              keyboard support, no overlay, and the names are ordinary selectable text.
+              The tab is a <span> rather than a <label> on purpose: a label activates its
+              control on mousedown, which cancels the drag — so its text cannot be
+              highlighted no matter what user-select says. Clicks are wired in JS, which
+              costs nothing here because swapping the command is JS anyway; the radios
+              stay for state and for native arrow-key navigation.
               Stacking them above the command also gives the command the full width. */}
           <fieldset class="pm-tabs">
             <legend class="sr-only">Package manager</legend>
             {packageManagers.map((pm, i) => (
               <>
                 <input class="sr-only pm-radio" type="radio" name="pm" id={`pm-${pm.id}`} value={pm.id} checked={i === 0} data-cmd={fullCmd(pm)} data-cmd-shown={shownCmd(pm)} />
-                <label class="pm-tab" for={`pm-${pm.id}`}>
+                <span class="pm-tab" data-radio={`pm-${pm.id}`}>
                   <svg class="pm-logo" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><use href={`${base}/logos/command-logos.svg#${pm.id}`}></use></svg>
-                  <span>{pm.label}</span>
-                </label>
+                  <span class="pm-tab-name">{pm.label}</span>
+                </span>
               </>
             ))}
           </fieldset>
@@ -474,6 +479,18 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
         apply();
         try { localStorage.setItem(KEY, r.value); } catch {}
       }));
+      // The tabs are spans, so their clicks are wired here (see the markup comment).
+      document.querySelectorAll(".pm-tab").forEach((tab) => {
+        tab.addEventListener("click", () => {
+          // A drag that left a selection was someone highlighting the name, not switching.
+          if (!window.getSelection().isCollapsed) return;
+          const radio = document.getElementById(tab.dataset.radio);
+          if (radio && !radio.checked) {
+            radio.checked = true;
+            radio.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        });
+      });
     })();
 
     // Escape closes an open hint without moving the pointer or focus, which the
@@ -649,6 +666,7 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
       user-select: text; -webkit-user-select: text;
     }
     .pm-tab .pm-logo { inline-size: 1.1em; block-size: 1.1em; }
+    .pm-tab-name { cursor: text; }
     .pm-radio:checked + .pm-tab { background: var(--surface); color: var(--text); }
     .pm-radio:focus-visible + .pm-tab { outline: 2px solid var(--accent, #38bdf8); outline-offset: 2px; }
     @media (hover: hover) { .pm-tab:hover { color: var(--text); } }
