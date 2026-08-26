@@ -38,7 +38,7 @@ installed by an earlier release is stranded. A config wired up **by hand** has n
 and `init` will never rewrite it — it prints the one-line change to make and leaves the file
 byte-for-byte alone.
 
-**3. `.claude-run` and `CLAUDE.md` overrides — never versioned.** These are input the user
+**3. `.runcommand` and `CLAUDE.md` overrides — never versioned.** These are input the user
 wrote, not state runcommand generated. The rule is simply that the syntax only ever grows:
 new forms get added, existing ones keep working. Asking someone to migrate a file they
 authored would be the wrong trade.

@@ -66,13 +66,32 @@ const CACHE_DIR = path.join(
 const ROOT_MARKERS = [".git", "package.json"];
 const MANIFESTS = [
   "package.json", "deno.json", "deno.jsonc",
-  "Cargo.toml", "go.mod", "pyproject.toml", "requirements.txt", "manage.py",
-  "setup.py", "Pipfile", "Makefile", "Justfile", "justfile", "Taskfile.yml",
-  "Procfile", "Gemfile", "mix.exs", "pom.xml", "build.gradle",
-  "build.gradle.kts", "CMakeLists.txt", "composer.json",
+  "Cargo.toml", "go.mod", "go.work", "pyproject.toml", "requirements.txt", "manage.py",
+  "setup.py", "Pipfile", "Makefile", "Justfile", "justfile", "Taskfile.yml", "Taskfile.yaml",
+  "Procfile", "Gemfile", "config.ru", "mix.exs", "pom.xml", "mvnw", "build.gradle",
+  "build.gradle.kts", "settings.gradle", "settings.gradle.kts", "gradlew",
+  "CMakeLists.txt", "composer.json", "artisan", "Package.swift", "Project.swift",
+  "pubspec.yaml", "build.zig", "build.sbt", "stack.yaml", "cabal.project",
+  "dune-project", "shard.yml", "rebar.config", "deps.edn", "project.clj",
+  "WORKSPACE", "MODULE.bazel", "flake.nix", "shell.nix", "default.nix",
+  "Fastfile", "project.godot", "Vagrantfile",
   "docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml",
   "index.html", "main.py", "app.py",
 ];
+// Bundles/files whose basename is project-specific — matched by suffix, not name.
+const MANIFEST_SUFFIXES = [".xcodeproj", ".xcworkspace", ".csproj", ".fsproj", ".sln", ".cabal"];
+// Directories that never hold a project's own run signals.
+const SCAN_SKIP = new Set([
+  "node_modules", "vendor", "dist", "build", "out", "target", "coverage",
+  "Pods", "DerivedData", "Carthage", "venv", "__pycache__", "tmp",
+  "assets", "docs", "third_party", "external",
+]);
+// Where loose run scripts conventionally live; script files elsewhere are noise.
+const SCRIPT_DIRS = new Set(["scripts", "script", "bin", "tools", "hack", "dev", "ci"]);
+const SCRIPT_EXTS = [".sh", ".ps1", ".cmd", ".bat"];
+const NESTED_DEPTH = 2;    // how many directory levels below the root to scan
+const NESTED_MAX = 40;     // signals handed to the model
+const NESTED_MAX_DIRS = 200; // visited-directory cap, so a huge tree can't stall a render
 const LOCKFILES = [
   ["pnpm-lock.yaml", "pnpm"],
   ["bun.lockb", "bun"],
@@ -82,12 +101,12 @@ const LOCKFILES = [
   ["npm-shrinkwrap.json", "npm"],
   ["deno.lock", "deno"],
 ];
-const OVERRIDE_FILES = [".claude-run", ".runcommand"];
+const OVERRIDE_FILES = [".runcommand"];
 // Manifests whose *contents* define the run command — hash their contents so
 // editing a Makefile target, a compose service, Cargo/pyproject, etc. triggers
 // an automatic re-detect (presence alone isn't enough for these).
 const CMD_MANIFESTS = [
-  "Makefile", "Justfile", "justfile", "Taskfile.yml", "Procfile",
+  "Makefile", "Justfile", "justfile", "Taskfile.yml", "Taskfile.yaml", "Procfile",
   "docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml",
   "Cargo.toml", "pyproject.toml", "composer.json", "mix.exs", "Gemfile",
   "deno.json", "deno.jsonc",
@@ -162,11 +181,77 @@ function detectPM(root, pkg) {
 
 // ---------- signals & override ----------
 
+const isManifestName = (name) =>
+  MANIFESTS.includes(name) || MANIFEST_SUFFIXES.some((s) => name.endsWith(s));
+
 function listManifests(root) {
   let entries = [];
   try { entries = fs.readdirSync(root); } catch { return []; }
   const set = new Set(entries);
-  return MANIFESTS.filter((m) => set.has(m));
+  return [
+    ...MANIFESTS.filter((m) => set.has(m)),
+    ...entries.filter((e) => MANIFEST_SUFFIXES.some((s) => e.endsWith(s))).sort(),
+  ];
+}
+
+// The root .gitignore, compiled to a matcher over root-relative paths.
+// Gitignored trees (build outputs, vendored deps, generated code) are exactly
+// where stale manifests live, so the nested scan skips them. Pragmatic subset
+// of the syntax: exact names, anchored (/dist) and directory (dist/) patterns,
+// and * / ** / ? globs. Negation (!) and nested .gitignore files are ignored —
+// worst case a pattern doesn't skip, never that real signal is hidden by a
+// mis-read negation.
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function gitignoreMatcher(root) {
+  const txt = readText(path.join(root, ".gitignore"));
+  if (!txt) return () => false;
+  const rules = [];
+  for (let line of txt.split("\n").slice(0, 500)) {
+    line = line.trim();
+    if (!line || line.startsWith("#") || line.startsWith("!")) continue;
+    const anchored = line.startsWith("/") || line.slice(0, -1).includes("/");
+    const pat = line.replace(/^\//, "").replace(/\/$/, "");
+    if (!pat) continue;
+    const rx = pat.split("**").map((seg) =>
+      seg.split("*").map((p) => p.split("?").map(escapeRe).join("[^/]")).join("[^/]*"),
+    ).join(".*");
+    try { rules.push(new RegExp("^" + (anchored ? "" : "(?:.*/)?") + rx + "(?:/.*)?$")); } catch { /* skip bad pattern */ }
+  }
+  if (!rules.length) return () => false;
+  return (rel) => rules.some((r) => r.test(rel));
+}
+
+// Fallback for projects whose signals don't live at the root (a Swift package in
+// a subdir, run scripts under scripts/, an app two levels down). BFS to
+// NESTED_DEPTH, junk and gitignored dirs skipped, shallower findings first — so
+// when the result is truncated at NESTED_MAX, it's the deep noise that's
+// dropped, never the signal closest to the root. Cheap enough for signalsHash
+// to call on every render; only consulted when the root itself shows nothing.
+function listNestedSignals(root) {
+  const found = [];
+  const ignored = gitignoreMatcher(root);
+  const queue = [{ rel: "", depth: 0 }];
+  let visited = 0;
+  while (queue.length && found.length < NESTED_MAX && visited < NESTED_MAX_DIRS) {
+    const { rel, depth } = queue.shift();
+    visited++;
+    let entries = [];
+    try { entries = fs.readdirSync(path.join(root, rel), { withFileTypes: true }); } catch { continue; }
+    const dirBase = rel ? path.basename(rel) : "";
+    for (const e of entries.sort((a, b) => (a.name < b.name ? -1 : 1))) {
+      const name = e.name;
+      if (name.startsWith(".")) continue;
+      const relPath = rel ? rel + "/" + name : name;
+      if (ignored(relPath)) continue;
+      if (isManifestName(name)) { found.push(relPath); continue; } // bundle dirs count as leaves
+      if (e.isDirectory()) {
+        if (depth < NESTED_DEPTH && !SCAN_SKIP.has(name)) queue.push({ rel: relPath, depth: depth + 1 });
+      } else if (SCRIPT_EXTS.some((s) => name.endsWith(s)) && (depth === 0 || SCRIPT_DIRS.has(dirBase))) {
+        found.push(relPath);
+      }
+    }
+  }
+  return found.slice(0, NESTED_MAX);
 }
 
 // Strip fenced code blocks so a documentation example ("Run: ..." shown inside
@@ -225,7 +310,8 @@ function collectSignals(root) {
   const manifests = listManifests(root);
   const hint = readRunHint(root);
   const scripts = pkg && pkg.scripts && typeof pkg.scripts === "object" ? pkg.scripts : null;
-  return { root, basename: path.basename(root), pkg, pm, manifests, hint, scripts };
+  const nested = !pkg && manifests.length === 0 ? listNestedSignals(root) : [];
+  return { root, basename: path.basename(root), pkg, pm, manifests, nested, hint, scripts };
 }
 
 // Hash the bits that should trigger a re-detect when they change. Cheap enough
@@ -238,7 +324,11 @@ function signalsHash(root) {
     parts.push("scripts:" + JSON.stringify(pkg.scripts || {}));
     parts.push("pm:" + (pkg.packageManager || ""));
   }
-  parts.push("manifests:" + listManifests(root).join(","));
+  const manifests = listManifests(root);
+  parts.push("manifests:" + manifests.join(","));
+  // Root shows nothing → the nested fallback feeds detection, so it must feed
+  // the hash too (adding e.g. a Package.swift one level down re-detects).
+  if (!pkgTxt && manifests.length === 0) parts.push("nested:" + listNestedSignals(root).join(","));
   for (const [file] of LOCKFILES) if (exists(path.join(root, file))) parts.push("lock:" + file);
   for (const f of OVERRIDE_FILES) { const t = readText(path.join(root, f)); if (t != null) parts.push(f + ":" + t); }
   // Contents of command-defining manifests (small files; cheap to hash) so that
@@ -305,18 +395,26 @@ function buildPrompt(sig, note) {
     "  (e.g. a web app AND a separate API/backend/worker), return one tagged",
     '  command each: <cmd label="web">pnpm dev:web</cmd> <cmd label="api">pnpm dev:api</cmd>.',
     "  Do NOT split one app into build/lint/test steps — only genuine services.",
+    '  When the root "dev" script only fans out to every workspace (pnpm -r/--recursive',
+    "  --parallel run dev, turbo run dev), prefer the labeled per-service commands.",
     `- Use this package manager for JS/TS projects: ${sig.pm || "unknown"}.`,
     '- Prefer a dev server (like "<pm> dev") over build/start/preview when several exist.',
     "- A docker-compose file is usually for backing services (db, cache, queue), NOT",
     "  the app itself. Only answer 'docker compose up' when there is no package.json",
     "  dev script and no other app-level run command.",
-    "- For non-JS projects use the idiomatic command (cargo run, go run ., ",
+    "- For non-JS projects use the idiomatic command (cargo run, go run ., swift run,",
     "  python manage.py runserver, make dev, docker compose up, etc.).",
     "- If there is genuinely no run/dev step (a pure library), answer <cmd>none</cmd>.",
     "",
     `Project: ${sig.basename}`,
     `Package manager: ${sig.pm || "unknown"}`,
-    `Manifest/config files present: ${sig.manifests.join(", ") || "(none)"}`,
+    `Manifest/config files present: ${sig.manifests.join(", ") || "(none at the root)"}`,
+    ...(sig.nested && sig.nested.length ? [
+      `Signals in subdirectories (paths relative to the project root): ${sig.nested.join(", ")}`,
+      "IMPORTANT: the command is executed from the project root. When the manifest",
+      "lives in a subdirectory, the command MUST name that subdirectory — e.g.",
+      '"swift run --package-path <dir> <product>", "make -C <dir>", "cd <dir> && cargo run".',
+    ] : []),
     "package.json scripts:",
     scripts,
     "Run hint from README/CLAUDE.md (may be empty):",
@@ -393,11 +491,24 @@ function formatCommandsCLI(commands) {
 // empty means "let the agent use its own configured default" (only claude, which
 // defaults to a big model interactively, needs us to pick the cheap one).
 const AGENTS = {
-  claude:   { bin: "claude",       pre: (m) => ["-p", ...(m ? ["--model", m] : [])], model: "haiku" },
-  opencode: { bin: "opencode",     pre: (m) => ["run", ...(m ? ["--model", m] : [])], model: "" },
-  gemini:   { bin: "gemini",       pre: (m) => [...(m ? ["-m", m] : []), "-p"],       model: "" },
-  qwen:     { bin: "qwen",         pre: (m) => [...(m ? ["-m", m] : []), "-p"],       model: "" },
-  codex:    { bin: "codex",        pre: (m) => ["exec", ...(m ? ["-m", m] : [])],     model: "" },
+  // --strict-mcp-config (with no --mcp-config) skips every MCP server and
+  // --setting-sources "" skips settings/hooks: a repo whose .mcp.json boots
+  // pnpx-installed servers, or whose hooks spawn binaries, can eat the whole
+  // detect timeout on startup alone — detection needs none of that, just the
+  // model. On a claude too old for a flag the spawn exits non-zero and the
+  // chain falls through to the next agent, same as any other failure.
+  // Where a CLI has one, the same isolation is passed to the others: opencode
+  // --pure (no external plugins), qwen --safe-mode (no context files, hooks,
+  // extensions, or MCP), gemini -e none (no extensions), codex -c mcp_servers={}.
+  // A CLI too old for its flag exits non-zero — fast — and the chain moves on.
+  claude:   { bin: "claude",       pre: (m) => ["-p", "--strict-mcp-config", "--setting-sources", "", ...(m ? ["--model", m] : [])], model: "haiku" },
+  opencode: { bin: "opencode",     pre: (m) => ["run", "--pure", ...(m ? ["--model", m] : [])], model: "" },
+  gemini:   { bin: "gemini",       pre: (m) => ["-e", "none", ...(m ? ["-m", m] : []), "-p"],   model: "" },
+  qwen:     { bin: "qwen",         pre: (m) => ["--safe-mode", ...(m ? ["-m", m] : []), "-p"],  model: "" },
+  // --skip-git-repo-check: codex exec refuses to run in a directory it doesn't
+  // trust; detection is read-only Q&A, and without it every non-approved repo
+  // silently fell through to the next agent.
+  codex:    { bin: "codex",        pre: (m) => ["exec", "--skip-git-repo-check", "-c", "mcp_servers={}", ...(m ? ["-m", m] : [])], model: "" },
   // DeepSeek Harness. Its headless profile is exactly our shape: "answer one task,
   // print the final assistant message, and exit". The model isn't selectable per-call
   // (it belongs to the profile), so RUNCOMMAND_MODEL is ignored here, as with amp/goose.
@@ -522,7 +633,7 @@ function detect(root, { quiet = false, note, clearNote = false } = {}) {
     return { commands: override.commands, source: "override" };
   }
   const sig = collectSignals(root);
-  if (!sig.pkg && sig.manifests.length === 0) {
+  if (!sig.pkg && sig.manifests.length === 0 && sig.nested.length === 0) {
     saveCache(root, { commands: [], source: "empty", note: activeNote, signalsHash: hash, detectedAt: Date.now() });
     return { commands: [], source: "empty" };
   }
@@ -848,7 +959,7 @@ Env:   RUNCOMMAND_AGENT   priority list tried in order, first installed wins, e.
        RUNCOMMAND_TTL_MS   NO_COLOR
        RUNCOMMAND_PORT_STYLE (url|compact)   RUNCOMMAND_NO_PORTS   RUNCOMMAND_PORTS_TTL_MS
 
-Per-project override (instant, no model call): a .claude-run file — one command
+Per-project override (instant, no model call): a .runcommand file — one command
 per line, optional "label: command" — or a "Run: <command>" line in CLAUDE.md.
 Several services (web/api/…) render as one line: "web: … · api: …".`;
 
@@ -1352,4 +1463,4 @@ const invokedAsCli = (() => {
 if (invokedAsCli) main();
 
 // Pure helpers, exported for tests. Nothing here touches the filesystem or spawns.
-export { parseNetstat, cmdlineInProject, normalizeCommands, formatCommandsCLI, keepPort, blockVersionIn, blockFingerprints, isEphemeralInstall, BLOCK_V, CACHE_V };
+export { parseNetstat, cmdlineInProject, normalizeCommands, formatCommandsCLI, keepPort, blockVersionIn, blockFingerprints, isEphemeralInstall, listManifests, listNestedSignals, collectSignals, signalsHash, BLOCK_V, CACHE_V };

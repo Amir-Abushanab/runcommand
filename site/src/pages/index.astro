@@ -371,7 +371,7 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
         </div>
         <div class="config-note">
           <h3>Project overrides</h3>
-          <p>Overrides take precedence over cached detection and skip the detection agent.</p>
+          <p>Overrides take precedence over cached detection and skip the detection agent. Commit them — everyone cloning the repo gets the pinned command.</p>
           <div class="table-wrap override-table">
             <table>
               <thead>
@@ -379,7 +379,7 @@ const GH_PATH = "M8 .2a8 8 0 00-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.3
               </thead>
               <tbody>
                 <tr>
-                  <td><code>.claude-run</code><br /><code>.runcommand</code></td>
+                  <td><code>.runcommand</code></td>
                   <td>One command per line. Add a <code>label:</code> prefix to name multiple services.</td>
                   <td><Code class="syntax-inline" code="web: pnpm dev" lang="yaml" themes={codeThemes} transformers={inlineCodeTransformers} inline /></td>
                 </tr>

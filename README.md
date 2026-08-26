@@ -146,7 +146,7 @@ status line's `PATH`.
 ## Overrides (instant, no model call)
 
 To pin a project's command yourself — for anything the model gets wrong, or to skip the
-model entirely — add a **`.claude-run`** file (or `.runcommand`), one command per line:
+model entirely — add a **`.runcommand`** file, one command per line:
 
 ```
 make serve PORT=8080
@@ -159,7 +159,8 @@ fences, so documentation examples like this one don't count):
 Run: docker compose up --build
 ```
 
-Overrides win over the cache and cost nothing.
+Overrides win over the cache and cost nothing. **Commit the file** — everyone who
+clones the repo gets the pinned command.
 
 **Several services?** Prefix each with a `label:` and they render on one compact line, each
 in its own color (cycled from a colorblind-safe palette; tune with `RUNCOMMAND_COLORS`):
