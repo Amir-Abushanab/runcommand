@@ -1,5 +1,23 @@
 # @amabush/runcommand-opencode
 
+## 0.3.1
+
+### Patch Changes
+
+- [`907507d`](https://github.com/Amir-Abushanab/runcommand/commit/907507d4860d428c60f50555b2e29272570d05f5) Thanks [@Amir-Abushanab](https://github.com/Amir-Abushanab)! - Document the registration form that actually works: a **path** to `dist/tui.js`, not the
+  package name.
+  
+  `"plugin": ["@amabush/runcommand-opencode/tui"]` looks right and resolves fine from
+  `~/.config/opencode` — but OpenCode resolves plugin specifiers from the project it is
+  running in, where an installed package under the config directory is not on the resolution
+  path. It is never found, and nothing says so: no error, no plugin, an empty footer.
+  
+  Install as before, then point `tui.json` at the file:
+  
+  ```json
+  { "plugin": ["/Users/you/.config/opencode/node_modules/@amabush/runcommand-opencode/dist/tui.js"] }
+  ```
+
 ## 0.3.0
 
 ### Minor Changes
