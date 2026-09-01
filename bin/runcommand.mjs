@@ -221,6 +221,35 @@ function gitignoreMatcher(root) {
   return (rel) => rules.some((r) => r.test(rel));
 }
 
+// A directory that merely *holds* projects (~/Code, ~/src, ~/work) is not itself
+// a project, but the nested fallback below can't tell: it walks two levels down,
+// finds forty package.jsons belonging to forty unrelated repos, and hands them to
+// the model as if they described one app. The model then answers in English
+// ("Once you clarify, I can provide…") — which is the only sane answer, and is
+// not a run command.
+//
+// Recognised by what the root itself lacks (no .git, no manifest — nothing marks
+// it as a root) plus children that are each self-contained. A monorepo is never
+// caught: its root carries the .git or a workspace manifest, so it returns early.
+const CONTAINER_MIN_REPOS = 2;    // sibling git repos are never one project...
+const CONTAINER_MIN_PROJECTS = 3; // ...nor are three self-contained manifests
+function isProjectContainer(root) {
+  if (exists(path.join(root, ".git")) || listManifests(root).length) return false;
+  let entries = [];
+  try { entries = fs.readdirSync(root, { withFileTypes: true }); } catch { return false; }
+  let repos = 0, projects = 0, looked = 0;
+  for (const e of entries) {
+    if (!e.isDirectory() || e.name.startsWith(".") || SCAN_SKIP.has(e.name)) continue;
+    if (++looked > NESTED_MAX_DIRS) break; // same cap the nested scan uses
+    const isRepo = exists(path.join(root, e.name, ".git"));
+    if (!isRepo && listManifests(path.join(root, e.name)).length === 0) continue;
+    if (isRepo) repos++;
+    projects++;
+    if (repos >= CONTAINER_MIN_REPOS || projects >= CONTAINER_MIN_PROJECTS) return true;
+  }
+  return false;
+}
+
 // Fallback for projects whose signals don't live at the root (a Swift package in
 // a subdir, run scripts under scripts/, an app two levels down). BFS to
 // NESTED_DEPTH, junk and gitignored dirs skipped, shallower findings first — so
@@ -310,7 +339,7 @@ function collectSignals(root) {
   const manifests = listManifests(root);
   const hint = readRunHint(root);
   const scripts = pkg && pkg.scripts && typeof pkg.scripts === "object" ? pkg.scripts : null;
-  const nested = !pkg && manifests.length === 0 ? listNestedSignals(root) : [];
+  const nested = !pkg && manifests.length === 0 && !isProjectContainer(root) ? listNestedSignals(root) : [];
   return { root, basename: path.basename(root), pkg, pm, manifests, nested, hint, scripts };
 }
 
@@ -327,8 +356,10 @@ function signalsHash(root) {
   const manifests = listManifests(root);
   parts.push("manifests:" + manifests.join(","));
   // Root shows nothing → the nested fallback feeds detection, so it must feed
-  // the hash too (adding e.g. a Package.swift one level down re-detects).
-  if (!pkgTxt && manifests.length === 0) parts.push("nested:" + listNestedSignals(root).join(","));
+  // the hash too (adding e.g. a Package.swift one level down re-detects). A
+  // container dir gets no nested signals, so its hash must not carry them either
+  // — otherwise every new project cloned into ~/Code re-detects a non-project.
+  if (!pkgTxt && manifests.length === 0 && !isProjectContainer(root)) parts.push("nested:" + listNestedSignals(root).join(","));
   for (const [file] of LOCKFILES) if (exists(path.join(root, file))) parts.push("lock:" + file);
   for (const f of OVERRIDE_FILES) { const t = readText(path.join(root, f)); if (t != null) parts.push(f + ":" + t); }
   // Contents of command-defining manifests (small files; cheap to hash) so that
@@ -431,12 +462,40 @@ function buildPrompt(sig, note) {
   return lines.join("\n");
 }
 
+// English function words a shell command has no use for. Matched as whole
+// alphabetic tokens only, so `docker run -it` never reads as "it".
+const PROSE_WORDS = new Set([
+  "a", "an", "the", "this", "that", "there", "these", "those", "i", "you", "your",
+  "is", "are", "was", "were", "be", "no", "not", "can", "cannot", "could", "would",
+  "should", "please", "sorry", "appears", "seems", "looks", "provide", "clarify",
+  "specify", "which", "what", "why", "how",
+]);
+
+// The prompt asks for a command and normally gets one — but given a directory it
+// can't answer for, the model replies in prose instead ("Once you clarify, I can
+// provide the correct command for that project's dev setup."). Cached verbatim,
+// that sentence sits in the status bar until someone runs `refresh`. Rejected on
+// shape alone — a run command is a short argv, not a sentence — so no vocabulary
+// list has to keep up with how a given model happens to phrase a refusal.
+function looksLikeProse(cmd) {
+  const words = cmd.split(/\s+/);
+  if (words.length > 12) return true;        // no real dev command runs this long
+  // Sentence-final punctuation. "go run ." and "node ." stay safe: there the dot
+  // is its own argument, so the character before it is a space.
+  if (/[\w)\]'"`][.!?]$/.test(cmd)) return true;
+  if (/,\s/.test(cmd)) return true;          // comma-then-space is punctuation, not argv
+  let prose = 0;
+  for (const w of words) if (/^[a-z]+$/i.test(w) && PROSE_WORDS.has(w.toLowerCase())) prose++;
+  return prose >= 2;                         // one could be a program name; two is a sentence
+}
+
 function cleanCmd(s) {
   let cmd = (s || "").trim().replace(/^```[a-z]*\n?/i, "").replace(/```$/, "").trim();
   cmd = cmd.replace(/<\/?cmd[^>]*>/gi, "").trim(); // strip stray <cmd> tags
   cmd = cmd.replace(/^[`'"]|[`'"]$/g, "").replace(/^\$\s*/, "").replace(/^>\s*/, "").trim();
   if (!cmd || /^none$/i.test(cmd) || /^\(none\)$/i.test(cmd)) return "";
-  return cmd.split("\n")[0].slice(0, 200).trim();
+  cmd = cmd.split("\n")[0].slice(0, 200).trim();
+  return looksLikeProse(cmd) ? "" : cmd;
 }
 
 // Parse the model's answer into [{label?, command}]. Multiple <cmd> tags => a
@@ -793,6 +852,10 @@ function cmdlineInProject(cmdline, root) {
 }
 
 function computePorts(root, all) {
+  // Scoping is "the process's cwd is under root", which a container dir like
+  // ~/Code satisfies for every dev server on the machine — it would claim each
+  // one as its own. It owns none of them; only --all still answers there.
+  if (!all && isProjectContainer(root)) return [];
   const listeners = scanListeners().filter((l) => keepPort(l.port));
   if (!listeners.length) return [];
   const uniq = (ps) => [...new Set(ps)].sort((a, b) => a - b);
@@ -1463,4 +1526,4 @@ const invokedAsCli = (() => {
 if (invokedAsCli) main();
 
 // Pure helpers, exported for tests. Nothing here touches the filesystem or spawns.
-export { parseNetstat, cmdlineInProject, normalizeCommands, formatCommandsCLI, keepPort, blockVersionIn, blockFingerprints, isEphemeralInstall, listManifests, listNestedSignals, collectSignals, signalsHash, BLOCK_V, CACHE_V };
+export { parseNetstat, cmdlineInProject, normalizeCommands, formatCommandsCLI, keepPort, blockVersionIn, blockFingerprints, isEphemeralInstall, listManifests, listNestedSignals, isProjectContainer, collectSignals, signalsHash, cleanCmd, parseCommands, BLOCK_V, CACHE_V };
