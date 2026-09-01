@@ -104,6 +104,11 @@ else is on the machine, and you never *need* a specific agent. `RUNCOMMAND_AGENT
 (`opencode`) or sets the chain (`opencode,claude`). A broken agent falls through too; a
 clean "no run command" answer does not.
 
+A directory that only *holds* projects — `~/Code`, `~/src`, `~/work` — is never asked about.
+It has no `.git` and no manifest of its own, and its subdirectories are separate repos, so
+runcommand recognizes it and renders nothing: no run command, and no ports (the ones listening
+belong to the projects inside it, not to it). `runcommand ports --all` still lists them.
+
 | `RUNCOMMAND_AGENT` | Runs | Needs on `PATH` |
 | --- | --- | --- |
 | `claude` *(default)* | `claude -p "<prompt>" --model haiku` | [Claude Code](https://claude.com/claude-code) |

@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { listManifests, listNestedSignals, collectSignals, signalsHash } from "../bin/runcommand.mjs";
+import { listManifests, listNestedSignals, isProjectContainer, collectSignals, signalsHash } from "../bin/runcommand.mjs";
 
 function tmpProject(layout) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "runcommand-test-"));
@@ -96,4 +96,57 @@ test("signalsHash: adding a nested manifest to an empty-root project re-detects"
   fs.mkdirSync(path.join(root, "App"), { recursive: true });
   fs.writeFileSync(path.join(root, "App", "Package.swift"), "// swift-tools-version:6.0");
   assert.notEqual(signalsHash(root), before);
+});
+
+// A directory that holds projects is not a project. Without this the nested
+// fallback hands the model forty unrelated manifests and gets prose back.
+test("isProjectContainer: sibling git repos mean the parent only holds projects", () => {
+  const root = tmpProject({
+    "anesthify/.git/HEAD": "ref: refs/heads/main",
+    "anesthify/package.json": "{}",
+    "barikly-web/.git/HEAD": "ref: refs/heads/main",
+    "barikly-web/package.json": "{}",
+    "notes.md": "loose file, not a project",
+  });
+  assert.equal(isProjectContainer(root), true);
+  assert.deepEqual(collectSignals(root).nested, []);
+});
+
+test("isProjectContainer: three self-contained manifests count even without git", () => {
+  const root = tmpProject({
+    "one/package.json": "{}",
+    "two/Cargo.toml": "[package]",
+    "three/go.mod": "module three",
+  });
+  assert.equal(isProjectContainer(root), true);
+});
+
+test("isProjectContainer: a monorepo root is never a container", () => {
+  // Its own .git returns early, so apps/* below it still feed detection.
+  const root = tmpProject({
+    ".git/HEAD": "ref: refs/heads/main",
+    "web/package.json": '{"scripts":{"dev":"vite"}}',
+    "api/go.mod": "module api",
+    "worker/Cargo.toml": "[package]",
+  });
+  assert.equal(isProjectContainer(root), false);
+  assert.deepEqual(collectSignals(root).nested, ["api/go.mod", "web/package.json", "worker/Cargo.toml"]);
+});
+
+test("isProjectContainer: the split-in-two project the nested fallback exists for", () => {
+  // Two subdirs, neither its own repo — below both thresholds, so it detects.
+  const root = tmpProject({ "App/Package.swift": "// swift-tools-version:6.0", "scripts/run.sh": "#!/bin/sh" });
+  assert.equal(isProjectContainer(root), false);
+  assert.deepEqual(collectSignals(root).nested, ["App/Package.swift", "scripts/run.sh"]);
+});
+
+test("signalsHash: a container's hash ignores the projects inside it", () => {
+  const root = tmpProject({
+    "one/.git/HEAD": "ref: refs/heads/main",
+    "two/.git/HEAD": "ref: refs/heads/main",
+  });
+  const before = signalsHash(root);
+  fs.mkdirSync(path.join(root, "three"), { recursive: true });
+  fs.writeFileSync(path.join(root, "three", "package.json"), '{"scripts":{"dev":"vite"}}');
+  assert.equal(signalsHash(root), before, "cloning another repo into ~/Code must not re-detect it");
 });

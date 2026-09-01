@@ -9,6 +9,8 @@ import {
   normalizeCommands,
   formatCommandsCLI,
   keepPort,
+  cleanCmd,
+  parseCommands,
   blockVersionIn,
   isEphemeralInstall,
   BLOCK_V,
@@ -150,4 +152,48 @@ test("isEphemeralInstall: spots an npx cache path, on either separator", () => {
   assert.equal(isEphemeralInstall("/opt/homebrew/lib/node_modules/runcommand/bin/runcommand.mjs"), false);
   // A directory merely named like the cache marker isn't one.
   assert.equal(isEphemeralInstall("/Users/x/code/_npxtools/bin/runcommand.mjs"), false);
+});
+
+// The real regression: asked about ~/Code (117 unrelated repos), the model
+// answered in English and the sentence was cached and rendered as the command.
+test("cleanCmd: a prose answer is not a command", () => {
+  const prose = [
+    "Once you clarify, I can provide the correct `` for that project's dev setup.",
+    "There is no single run command for this directory.",
+    "I cannot determine the dev command without more context",
+    "This appears to be a collection of separate projects",
+  ];
+  for (const p of prose) assert.equal(cleanCmd(p), "", `should reject: ${p}`);
+});
+
+test("cleanCmd: real commands survive the prose filter", () => {
+  const commands = [
+    "pnpm dev",
+    "go run .",
+    "node .",
+    "cargo run",
+    "python manage.py runserver 0.0.0.0:8000",
+    "docker compose -f docker-compose.dev.yml up --build",
+    "docker run -it --rm -p 3000:3000 node:20 pnpm dev",
+    "swift run --package-path App MyApp",
+    "cd frontend && pnpm dev",
+    "PORT=3000 pnpm dev",
+    "make -C backend dev",
+    "./gradlew bootRun",
+    "Rscript app.R",
+  ];
+  for (const c of commands) assert.equal(cleanCmd(c), c, `should keep: ${c}`);
+});
+
+test("parseCommands: a chatty answer with no tags yields nothing, not its last line", () => {
+  const stdout = [
+    "I looked at the directory but it holds many unrelated projects.",
+    "Once you clarify which one you mean, I can provide the correct command.",
+  ].join("\n");
+  assert.deepEqual(parseCommands(stdout), []);
+});
+
+test("parseCommands: prose inside <cmd> tags is dropped too", () => {
+  assert.deepEqual(parseCommands("<cmd>There is no run command for this folder.</cmd>"), []);
+  assert.deepEqual(parseCommands('<cmd label="web">pnpm dev:web</cmd>'), [{ label: "web", command: "pnpm dev:web" }]);
 });
