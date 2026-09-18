@@ -33,7 +33,7 @@ whatever already draws your status line.
 One command:
 
 ```sh
-npm i -g @amabush/runcommand && runcommand init
+pnpm add -g @amabush/runcommand && runcommand init
 ```
 
 `init` detects the tools you actually have — Claude Code, Qwen Code, starship, tmux — and
@@ -47,6 +47,17 @@ Gemini CLI, Qwen Code, Codex or [DeepSeek Harness](https://github.com/deepseek-a
 work too. Developed on macOS/Linux; [Windows](#windows) is best-effort.
 
 <details>
+<summary>npm or bun instead</summary>
+
+`bun add -g @amabush/runcommand` works just as well. So does `npm i -g @amabush/runcommand`,
+unless your Node comes from a version manager (nvm, fnm, mise, asdf). There, npm installs
+globals inside the current Node version's own directory, so the next Node upgrade takes
+`runcommand` off your `PATH` and your status line goes blank. pnpm and bun keep globals
+outside those directories, and `init` warns when it finds a copy that won't survive an
+upgrade.
+</details>
+
+<details>
 <summary>From a clone instead</summary>
 
 ```sh
@@ -57,8 +68,8 @@ Run from a checkout, `init` offers to put `runcommand` on your `PATH` (a symlink
 `~/.local/bin`) and otherwise writes the absolute `node …/runcommand.mjs` invocation into
 your configs — so keep the clone somewhere permanent. You can also skip `init` entirely
 and wire things up by hand: every section below is the manual equivalent of what it
-writes. (Don't install with `npx` — it runs from a cache directory that disappears, so
-`init` refuses.)
+writes. (Don't run it through `npx`, `pnpm dlx` or `bunx` — they only put `runcommand` on
+your `PATH` until the command exits, so `init` refuses.)
 </details>
 
 ## Claude Code

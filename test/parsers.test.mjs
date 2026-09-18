@@ -13,6 +13,7 @@ import {
   parseCommands,
   blockVersionIn,
   isEphemeralInstall,
+  isVersionBoundInstall,
   BLOCK_V,
   CACHE_V,
 } from "../bin/runcommand.mjs";
@@ -152,6 +153,60 @@ test("isEphemeralInstall: spots an npx cache path, on either separator", () => {
   assert.equal(isEphemeralInstall("/opt/homebrew/lib/node_modules/runcommand/bin/runcommand.mjs"), false);
   // A directory merely named like the cache marker isn't one.
   assert.equal(isEphemeralInstall("/Users/x/code/_npxtools/bin/runcommand.mjs"), false);
+});
+
+// pnpm dlx runs the package from pnpm's store, the same place a real pnpm global
+// resolves to, so init also checks the `runcommand` on PATH, which dlx serves from
+// its cache's .bin. bunx runs out of a temp dir. Paths are what each runner produced.
+test("isEphemeralInstall: pnpm dlx and bunx too, but never a real pnpm install", () => {
+  const oneShot = [
+    "/Users/x/Library/Caches/pnpm/dlx/7acadb2b49648e786e569484bb8a4381/mu6vbmqo-1nzg/node_modules/.bin/runcommand",
+    "/home/x/.cache/pnpm/dlx/7acadb2b49648e786e569484bb8a4381/mu6vbmqo-1nzg/node_modules/.bin/runcommand",
+    "C:\\Users\\x\\AppData\\Local\\pnpm-cache\\dlx\\7acadb2b49648e786e569484bb8a4381\\mu6vbmqo-1nzg\\node_modules\\.bin\\runcommand.CMD",
+    "/private/var/folders/q0/p9fp/T/bunx-501-@amabush/runcommand@latest/node_modules/@amabush/runcommand/bin/runcommand.mjs",
+    "/tmp/bunx-1000-@amabush/runcommand@latest/node_modules/.bin/runcommand",
+  ];
+  const durable = [
+    "/Users/x/Library/pnpm/store/v11/links/@amabush/runcommand/0.5.1/d1a0491dfbd6/node_modules/@amabush/runcommand/bin/runcommand.mjs",
+    "/Users/x/Library/pnpm/bin/runcommand",
+    "/Users/x/.bun/bin/runcommand",
+    "/Users/x/code/dlx/runcommand/bin/runcommand.mjs",
+  ];
+  for (const p of oneShot) assert.equal(isEphemeralInstall(p), true, p);
+  for (const p of durable) assert.equal(isEphemeralInstall(p), false, p);
+  assert.equal(isEphemeralInstall(null), false);
+});
+
+// npm under a Node version manager installs into that one version's directory, so the
+// next Node upgrade takes `runcommand` off PATH and the status line goes blank. init
+// warns on these, and has to stay quiet for every install that survives an upgrade.
+test("isVersionBoundInstall: spots a global inside one Node version's directory", () => {
+  const bound = [
+    "/Users/x/.nvm/versions/node/v22.11.0/bin/runcommand",
+    "/Users/x/.nvm/versions/node/v22.11.0/lib/node_modules/@amabush/runcommand/bin/runcommand.mjs",
+    "/Users/x/.nvm/versions/node/v23.0.0-rc.1/bin/runcommand",
+    "/Users/x/.local/share/fnm/node-versions/v22.11.0/installation/lib/node_modules/@amabush/runcommand/bin/runcommand.mjs",
+    "/Users/x/.local/state/fnm_multishells/48213_1726000000000/bin/runcommand",
+    "/Users/x/.local/share/mise/installs/node/22.11.0/bin/runcommand",
+    "/Users/x/.asdf/installs/nodejs/22.11.0/lib/node_modules/@amabush/runcommand/bin/runcommand.mjs",
+    "/Users/x/.nodenv/versions/22.11.0/bin/runcommand",
+    "/Users/x/.vite-plus/js_runtime/node/24.21.0/bin/runcommand",
+    "C:\\Users\\x\\AppData\\Roaming\\nvm\\v22.11.0\\node_modules\\@amabush\\runcommand\\bin\\runcommand.mjs",
+  ];
+  const durable = [
+    "/Users/x/Library/pnpm/bin/runcommand",
+    "/Users/x/Library/pnpm/global/v11/098176d3/node_modules/@amabush/runcommand/bin/runcommand.mjs",
+    "/Users/x/.bun/install/global/node_modules/@amabush/runcommand/bin/runcommand.mjs",
+    "/Users/x/.volta/tools/image/packages/@amabush/runcommand/lib/node_modules/@amabush/runcommand/bin/runcommand.mjs",
+    "/opt/homebrew/lib/node_modules/@amabush/runcommand/bin/runcommand.mjs",
+    "/usr/local/bin/runcommand",
+    "/Users/x/.local/bin/runcommand",
+    "/Users/x/.runcommand/bin/runcommand.mjs",
+    "C:\\Users\\x\\AppData\\Roaming\\npm\\node_modules\\@amabush\\runcommand\\bin\\runcommand.mjs",
+  ];
+  for (const p of bound) assert.equal(isVersionBoundInstall(p), true, p);
+  for (const p of durable) assert.equal(isVersionBoundInstall(p), false, p);
+  assert.equal(isVersionBoundInstall(null), false);
 });
 
 // The real regression: asked about ~/Code (117 unrelated repos), the model
