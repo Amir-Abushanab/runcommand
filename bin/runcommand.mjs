@@ -1035,11 +1035,24 @@ async function readStdin() {
 
 // ---------- init / uninstall (wire runcommand into your tools) ----------
 
-// npx runs us out of a cache directory that sits on PATH for exactly one invocation.
-// Both invocation forms we could write from there — a bare `runcommand`, or this
-// absolute path — stop resolving the moment npx exits, so `init` would leave behind a
-// status line that silently renders nothing. Detect it and ask for a durable install.
-function isEphemeralInstall(p = SELF) { return /[\\/]_npx[\\/]/.test(p); }
+// npx, pnpm dlx and bunx put runcommand on PATH for exactly one invocation. A bare
+// `runcommand` written from there stops resolving the moment the runner exits (and
+// npx's cache or bunx's temp dir takes the absolute path with it), so `init` would
+// leave behind a status line that silently renders nothing. Detect it and ask for a
+// durable install. Check both this script and the `runcommand` found on PATH: npx and
+// bunx show in the script's own path, but pnpm dlx runs the package straight out of
+// pnpm's store, where it looks like any real pnpm install. Only the `.bin` directory
+// dlx puts on PATH gives it away.
+function isEphemeralInstall(p = SELF) { return !!p && /[\\/](?:_npx|pnpm(?:-cache)?[\\/]dlx|bunx-[^\\/]*)[\\/]/.test(p); }
+// Under a Node version manager (nvm, fnm, mise, asdf, nodenv, vite-plus…), `npm i -g`
+// installs into the current Node version's own directory, and PATH only points there
+// until the next Node upgrade. After that `runcommand` stops resolving and every status
+// line wired to it goes blank, a line it wraps via RUNCOMMAND_BASE included. pnpm, bun
+// and Volta keep globals outside the version directories. Matches a version-named
+// directory under a Node install root (nvm's versions/node/v22.11.0, mise's
+// installs/node/22.11.0, asdf's installs/nodejs/…), plus fnm's per-shell PATH entry.
+const VERSION_BOUND_RE = /[\\/](?:node|nodejs|node-versions|versions|nvm)[\\/]v?\d+\.\d+\.\d+[^\\/]*[\\/]|[\\/]fnm_multishells[\\/]/;
+function isVersionBoundInstall(p) { return !!p && VERSION_BOUND_RE.test(p); }
 // How a config file should call runcommand: a bare `runcommand` if it's on PATH,
 // else this script through node.
 function selfInvocation() {
@@ -1267,14 +1280,18 @@ async function confirm(rl, q) {
 async function runInit() {
   const dry = ARGS.dryRun;
   const say = (s = "") => process.stdout.write(s + "\n");
-  if (isEphemeralInstall()) {
-    say(`runcommand init: this is running through npx, out of a cache directory that`);
-    say(`goes away when the command exits — so every line init wrote would point at a`);
-    say(`runcommand that no longer exists, and your status line would just go blank.`);
+  const onPath = findBin("runcommand");
+  if (isEphemeralInstall(SELF) || isEphemeralInstall(onPath)) {
+    say(`runcommand init: this is running through npx, pnpm dlx or bunx, which only put`);
+    say(`runcommand on your PATH until the command exits — so every line init wrote would`);
+    say(`point at a runcommand that no longer resolves, and your status line would go blank.`);
     say(``);
     say(`Install it for real first, then wire it up:`);
     say(``);
-    say(`  npm i -g @amabush/runcommand && runcommand init`);
+    say(`  pnpm add -g @amabush/runcommand && runcommand init`);
+    say(``);
+    say(`(bun add -g works too. So does npm i -g, unless your Node comes from a version`);
+    say(`manager like nvm or fnm: its globals drop off PATH at the next Node upgrade.)`);
     return;
   }
   const auto = [...JSON_HARNESSES, ...BLOCK_HARNESSES];
@@ -1287,9 +1304,17 @@ async function runInit() {
   try {
     say(`\nruncommand init — wire the run-command line into your tools\n`);
     // 1. PATH
-    const onPath = findBin("runcommand");
-    if (onPath) say(`✓ runcommand on PATH: ${onPath}`);
-    else if (IS_WIN) {
+    if (onPath) {
+      say(`✓ runcommand on PATH: ${onPath}`);
+      // The copy on PATH is what the wiring calls; this script is what the user just
+      // ran. Either one sitting in a version directory is the same trap.
+      if (isVersionBoundInstall(onPath) || isVersionBoundInstall(SELF)) {
+        say(`• It's installed inside one Node version's own directory (npm i -g under nvm, fnm,`);
+        say(`  mise, asdf…), so the next Node upgrade takes it off your PATH and your status`);
+        say(`  line goes blank. pnpm and bun install outside those directories:`);
+        say(`    pnpm add -g @amabush/runcommand && npm rm -g @amabush/runcommand`);
+      }
+    } else if (IS_WIN) {
       // No ~/.local/bin convention, and fs.symlink needs Developer Mode or admin.
       // npm's generated shim is the supported way to put a name on PATH here.
       say(`• runcommand isn't on your PATH; configs will call it via: ${selfInvocation()}`);
@@ -1526,4 +1551,4 @@ const invokedAsCli = (() => {
 if (invokedAsCli) main();
 
 // Pure helpers, exported for tests. Nothing here touches the filesystem or spawns.
-export { parseNetstat, cmdlineInProject, normalizeCommands, formatCommandsCLI, keepPort, blockVersionIn, blockFingerprints, isEphemeralInstall, listManifests, listNestedSignals, isProjectContainer, collectSignals, signalsHash, cleanCmd, parseCommands, BLOCK_V, CACHE_V };
+export { parseNetstat, cmdlineInProject, normalizeCommands, formatCommandsCLI, keepPort, blockVersionIn, blockFingerprints, isEphemeralInstall, isVersionBoundInstall, listManifests, listNestedSignals, isProjectContainer, collectSignals, signalsHash, cleanCmd, parseCommands, BLOCK_V, CACHE_V };
