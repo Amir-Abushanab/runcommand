@@ -1,5 +1,32 @@
 # @amabush/runcommand
 
+## 0.5.2
+
+### Patch Changes
+
+- [#7](https://github.com/Amir-Abushanab/runcommand/pull/7) [`5d4a61f`](https://github.com/Amir-Abushanab/runcommand/commit/5d4a61fef6fed2e8fdaf9ede34f8777e0ade655e) Thanks [@Amir-Abushanab](https://github.com/Amir-Abushanab)! - `init` refuses to run through `pnpm dlx` or `bunx`, the same as npx
+  
+  All three put `runcommand` on your PATH only until the command exits, so a status line
+  wired from inside one points at a `runcommand` that stops resolving the moment it
+  returns, and renders blank. npx was already caught. pnpm dlx slipped through because it
+  runs the package straight out of pnpm's store, which looks the same as a real pnpm
+  install. `init` now also checks the `runcommand` it finds on PATH, which dlx serves from
+  its cache. bunx is caught by its temp directory. Both get the same message as npx:
+  install it for real first.
+
+- [#7](https://github.com/Amir-Abushanab/runcommand/pull/7) [`5d4a61f`](https://github.com/Amir-Abushanab/runcommand/commit/5d4a61fef6fed2e8fdaf9ede34f8777e0ade655e) Thanks [@Amir-Abushanab](https://github.com/Amir-Abushanab)! - `init` warns when runcommand is installed inside one Node version's directory
+  
+  Under a Node version manager (nvm, fnm, mise, asdf), `npm i -g` installs into the
+  current Node version's own directory, and PATH only points there until the next Node
+  upgrade. After that, `runcommand` stops resolving and every status line wired to it
+  renders blank, with no error anywhere. That includes a status line it wraps through
+  `RUNCOMMAND_BASE`. `init` now says so when it finds a copy like that, and prints the
+  fix: `pnpm add -g @amabush/runcommand && npm rm -g @amabush/runcommand`.
+  
+  The README and the npx refusal now lead with `pnpm add -g`, since pnpm keeps globals
+  outside the version directories. So does bun, and npm is still fine for a Node that
+  doesn't come from a version manager.
+
 ## 0.5.1
 
 ### Patch Changes
