@@ -1,6 +1,6 @@
 {
   "name": "@amabush/runcommand",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Show each project's run/dev command in the Claude Code status bar. LLM-detected once, cached per-project.",
   "author": "Amir Abushanab",
   "license": "MIT",
