@@ -57,7 +57,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version-file: package.json # devEngines.runtime
           cache: pnpm
 
       # The OpenCode plugin's prepublishOnly bundles tui.tsx with bun, pinning
