@@ -36,7 +36,7 @@ One command:
 pnpm add -g @amabush/runcommand && runcommand init
 ```
 
-`init` detects the tools you actually have — Claude Code, Qwen Code, starship, tmux — and
+`init` detects the tools you actually have — Claude Code and its desktop app, Qwen Code, starship, tmux — and
 wires each one, backing up every file it touches and preserving any status line you already
 run. `--dry-run` previews the lot without writing, `--yes` skips the prompts, and
 `runcommand uninstall` puts everything back.
@@ -104,6 +104,26 @@ renders that first, then its own line beneath:
 The same stdin JSON is passed through, so anything that reads the standard contract just
 works, and the other tool's config is never touched. (The reverse works too: if your other
 tool can chain a child status line, point *it* at `runcommand statusline`.)
+
+### The Claude desktop app
+
+The desktop app's Code tab runs Claude Code with no status line, so runcommand ships a
+[Claude Code mod](integrations/claude-code/) that draws the same line — ports still
+clickable — in the band directly above the prompt. `runcommand init` installs it on a Mac
+whose app has used its Code tab (elsewhere, `runcommand init --surfaces claude-desktop`),
+with auto-update on, so each release reaches it by itself. By hand instead, at the prompt of
+a terminal session:
+
+```
+/plugin install runcommand --marketplace Amir-Abushanab/runcommand
+```
+
+then turn on its updates, which Claude Code leaves off for marketplaces other than
+Anthropic's: `/plugin` → **Marketplaces** → **runcommand** → **Enable auto-update**.
+
+It draws in the app only, leaving the terminal to the status line, unless you turn on its
+**Show in the terminal too** option in `/config` — a way to show runcommand in a terminal
+whose status-line slot belongs to another tool, with no chaining.
 
 ## Detection agent
 
@@ -222,6 +242,7 @@ guess:
 | Qwen Code | passes through | `compact` | measured — its TUI writes the full hyperlink to the terminal intact |
 | Zellij (zjstatus) | unverified | `url` | assume tmux-like until someone measures it |
 | OpenCode footer | n/a | n/a | the plugin reads `--json` and builds its own links via OpenTUI |
+| Claude desktop app | n/a | n/a | the [mod](integrations/claude-code/) reads `json`; ports are Markdown links, since the app draws a plain link only for `https:` |
 
 `RUNCOMMAND_PORT_STYLE` overrides the default on any surface.
 

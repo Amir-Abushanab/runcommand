@@ -1,0 +1,20 @@
+{
+  "name": "runcommand",
+  "displayName": "runcommand",
+  "version": "0.1.0",
+  "description": "Your project's run command and live localhost ports, above the prompt in the Claude desktop app, where Claude Code has no status line.",
+  "author": { "name": "Amir Abushanab" },
+  "homepage": "https://amir-abushanab.github.io/runcommand/",
+  "repository": "https://github.com/Amir-Abushanab/runcommand",
+  "license": "MIT",
+  "keywords": ["run-command", "dev-command", "localhost", "ports"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "terminal": {
+      "type": "boolean",
+      "title": "Show in the terminal too",
+      "description": "Also draw the line above the prompt in a terminal. Off by default, because there the status line already shows it.",
+      "default": false
+    }
+  }
+}

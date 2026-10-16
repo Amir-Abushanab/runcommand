@@ -31,7 +31,7 @@
     "site": "pnpm --dir site dev",
     "test": "node --test \"test/**/*.test.mjs\"",
     "changeset": "changeset",
-    "version": "changeset version",
+    "version": "changeset version && node scripts/sync-mod-version.mjs",
     "release": "node scripts/release.mjs"
   },
   "keywords": [

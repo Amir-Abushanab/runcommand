@@ -1,0 +1,13 @@
+{
+  "name": "runcommand",
+  "owner": { "name": "Amir Abushanab", "url": "https://github.com/Amir-Abushanab" },
+  "description": "runcommand's Claude Code mod: the project's run command and live ports above the prompt.",
+  "plugins": [
+    {
+      "name": "runcommand",
+      "displayName": "runcommand",
+      "description": "Your project's run command and live localhost ports, above the prompt in the Claude desktop app, where Claude Code has no status line.",
+      "source": "./integrations/claude-code"
+    }
+  ]
+}
