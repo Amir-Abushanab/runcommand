@@ -1132,12 +1132,13 @@ function unwireJson(h) {
 }
 
 // The Claude desktop app: its Code tab runs Claude Code with no status line, so there the
-// line comes from the Claude Code mod in integrations/claude-code. Claude Code installs a
-// plugin that a settings file enables from a marketplace a settings file declares (a session
-// clones the marketplace and fetches the plugin in the background), so installing it is two
-// entries in the same ~/.claude/settings.json the status line lives in. `autoUpdate` is why
-// init declares the marketplace itself: Claude Code leaves it off for every marketplace but
-// Anthropic's own, and without it no release of the mod ever reaches an install.
+// line comes from the Claude Code mod in integrations/claude-code. init installs it with
+// Claude Code's own CLI where that's here (`claude plugin marketplace add`, then `install`),
+// and either way leaves two entries in the same ~/.claude/settings.json the status line lives
+// in: the marketplace, and the mod enabled. Those two alone install it too (a session clones
+// the marketplace and fetches the plugin in the background), which is the fallback. Writing
+// `autoUpdate` on the marketplace is init's own part: Claude Code leaves it off for every
+// marketplace but Anthropic's own, and without it no release of the mod reaches an install.
 const MOD_MARKETPLACE = "runcommand";
 const MOD_REPO = "Amir-Abushanab/runcommand";
 const MOD_ID = `runcommand@${MOD_MARKETPLACE}`;
@@ -1220,11 +1221,34 @@ function readSettings(file) {
   if (text === null) return exists(file) ? null : {};
   try { const j = JSON.parse(text); return isObj(j) ? j : null; } catch { return null; }
 }
-function writeSettings(file, j) {
+function saveSettings(file, j) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const bak = backupFile(file);
   fs.writeFileSync(file, JSON.stringify(j, null, 2) + "\n");
-  return bak;
+}
+// Claude Code's own CLI installs the mod where it's here. Settings alone are enough for the mod
+// to load and update, but they leave it without an install record, and `claude plugin list`
+// and /plugin list only installs: a mod init had only declared would never show there.
+function claudeCli() { return findBin("claude", process.env.RUNCOMMAND_CLAUDE); }
+function runClaude(bin, args, timeout) {
+  // A .cmd shim (npm's, on Windows) only runs through a shell.
+  const viaShell = IS_WIN && /\.(cmd|bat)$/i.test(bin);
+  const res = spawnSync(viaShell ? `"${bin}"` : bin, args, { encoding: "utf8", timeout, shell: viaShell, stdio: ["ignore", "pipe", "pipe"] });
+  return { ok: !res.error && res.status === 0, out: `${res.stdout || ""}\n${res.stderr || ""}`, error: res.error };
+}
+// What the CLI said when it failed: its ✘ line, else its last line.
+function lastLine(res) {
+  if (res.error) return res.error.message;
+  const lines = res.out.replace(/\x1b\[[0-9;]*m/g, "").split("\n").map((l) => l.trim()).filter(Boolean);
+  const failed = lines.filter((l) => l.includes("✘")).pop();
+  return (failed || lines.pop() || "no output").replace(/^.*?✘\s*/, "");
+}
+// Whether `claude plugin list --json` lists the mod: true or false, or null where its output
+// can't be read (an older Claude Code, a failed run).
+function modListed(listJson) {
+  try {
+    const list = JSON.parse(listJson);
+    return Array.isArray(list) ? list.some((p) => isObj(p) && p.id === MOD_ID) : null;
+  } catch { return null; }
 }
 
 // Append-block surfaces (starship, tmux): append a marker-fenced block to a config
@@ -1444,17 +1468,42 @@ async function runInit() {
         const settings = readSettings(h.file);
         if (!settings) { say(`\n  ${h.label}: ${h.file} isn't a JSON object — left alone`); continue; }
         const p = planDesktopMod(settings);
-        if (p.action === "none") { say(`\n  ${h.label}: mod already installed, updating itself — ${h.file}`); continue; }
         if (p.action === "refused") { say(`\n  ${h.label}: ${p.reason} — left alone (${h.file})`); continue; }
+        const claude = claudeCli();
+        const listed = claude ? modListed(runClaude(claude, ["plugin", "list", "--json"], 60_000).out) : null;
+        if (p.action === "none" && (listed === true || !claude)) { say(`\n  ${h.label}: mod already installed, updating itself — ${h.file}`); continue; }
         say(`\n  ${h.label}: ${h.file}`);
         say(`    installs the runcommand mod, which draws the line above the prompt in the app's Code tab`);
-        say(`    extraKnownMarketplaces.${MOD_MARKETPLACE} = ${MOD_REPO} on GitHub, autoUpdate: true`);
-        say(`    enabledPlugins["${MOD_ID}"] = true`);
+        if (claude) {
+          say(`    claude plugin marketplace add ${MOD_REPO}`);
+          say(`    claude plugin install ${MOD_ID}`);
+          say(`    then extraKnownMarketplaces.${MOD_MARKETPLACE}.autoUpdate = true`);
+        } else {
+          say(`    extraKnownMarketplaces.${MOD_MARKETPLACE} = ${MOD_REPO} on GitHub, autoUpdate: true`);
+          say(`    enabledPlugins["${MOD_ID}"] = true`);
+          say(`    (no claude CLI found: it loads, but shows in \`claude plugin list\` only after \`claude plugin install ${MOD_ID}\`)`);
+        }
         if (dry) { say(`    [dry-run] not written`); continue; }
         if (!(await confirm(rl, `    apply? [Y/n] `))) { say(`    skipped`); continue; }
-        const bak = writeSettings(h.file, withDesktopMod(settings));
+        // Backed up before the CLI runs, since it writes the same file.
+        const bak = backupFile(h.file);
+        let installed = false;
+        if (claude) {
+          say(`    installing…`);
+          const added = runClaude(claude, ["plugin", "marketplace", "add", MOD_REPO], 180_000);
+          const done = added.ok ? runClaude(claude, ["plugin", "install", MOD_ID], 180_000) : added;
+          installed = done.ok;
+          if (!installed) say(`    claude couldn't install it (${lastLine(done)}); declaring it in settings instead`);
+        }
+        // Read again, after the CLI rewrote the file. `marketplace add` writes the marketplace's
+        // entry without autoUpdate, so it's set here, last.
+        const fresh = readSettings(h.file) || settings;
+        const next = withDesktopMod(fresh);
+        if (JSON.stringify(next) !== JSON.stringify(fresh)) saveSettings(h.file, next);
         say(`    ✓ installed${bak ? `  (backup: ${path.basename(bak)})` : ""}`);
-        say(`    Claude Code fetches it when a session next starts, and each release after that by itself`);
+        say(installed
+          ? `    \`claude plugin list\` shows it, and Claude Code fetches each release by itself`
+          : `    Claude Code fetches it when a session next starts, and each release after that by itself`);
         continue;
       }
       if (h.block) {
@@ -1518,9 +1567,15 @@ async function runUninstall() {
     const r = settings ? planDesktopModRemoval(settings) : { action: "none" };
     if (r.action === "foreign") { say(`  ${h.label}: the runcommand mod comes from ${r.from}, which init didn't add — left alone`); continue; }
     if (r.action === "none") { say(`  ${h.label}: not wired by runcommand — left alone`); continue; }
-    if (dry) { say(`  ${h.label}: [dry-run] would turn the runcommand mod off and remove its marketplace — ${h.file}`); continue; }
-    const bak = writeSettings(h.file, r.settings);
-    say(`  ${h.label}: turned the runcommand mod off and removed its marketplace — ${h.file}${bak ? `  (backup: ${path.basename(bak)})` : ""}`);
+    if (dry) { say(`  ${h.label}: [dry-run] would uninstall the runcommand mod and remove its marketplace — ${h.file}`); continue; }
+    const bak = backupFile(h.file);
+    // Through Claude Code where it can: removing the marketplace uninstalls the mod, taking its
+    // install record and both settings entries with it. Without the CLI, or for a marketplace
+    // it never fetched, the settings are edited instead.
+    const claude = claudeCli();
+    const removed = !!claude && runClaude(claude, ["plugin", "marketplace", "remove", MOD_MARKETPLACE], 60_000).ok;
+    if (!removed) saveSettings(h.file, r.settings);
+    say(`  ${h.label}: ${removed ? "uninstalled" : "turned off"} the runcommand mod and removed its marketplace — ${h.file}${bak ? `  (backup: ${path.basename(bak)})` : ""}`);
   }
   for (const h of BLOCK_HARNESSES) {
     const cur = exists(h.file) ? fs.readFileSync(h.file, "utf8") : "";
@@ -1673,4 +1728,4 @@ const invokedAsCli = (() => {
 if (invokedAsCli) main();
 
 // Pure helpers, exported for tests. Nothing here touches the filesystem or spawns.
-export { parseNetstat, cmdlineInProject, normalizeCommands, formatCommandsCLI, keepPort, blockVersionIn, blockFingerprints, isEphemeralInstall, isVersionBoundInstall, listManifests, listNestedSignals, isProjectContainer, collectSignals, signalsHash, cleanCmd, parseCommands, planDesktopMod, withDesktopMod, planDesktopModRemoval, BLOCK_V, CACHE_V };
+export { parseNetstat, cmdlineInProject, normalizeCommands, formatCommandsCLI, keepPort, blockVersionIn, blockFingerprints, isEphemeralInstall, isVersionBoundInstall, listManifests, listNestedSignals, isProjectContainer, collectSignals, signalsHash, cleanCmd, parseCommands, planDesktopMod, withDesktopMod, planDesktopModRemoval, modListed, BLOCK_V, CACHE_V };
