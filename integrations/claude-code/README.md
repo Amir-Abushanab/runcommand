@@ -28,10 +28,13 @@ pnpm add -g @amabush/runcommand && runcommand init
 ```
 
 It offers the mod on a Mac whose Claude app has used its Code tab; elsewhere, name it:
-`runcommand init --surfaces claude-desktop`. It writes two entries to `~/.claude/settings.json`
-(this repository as the `runcommand` marketplace, with auto-update on, and
-`runcommand@runcommand` enabled), and Claude Code fetches the mod in the background when a
-session next starts. `runcommand uninstall` turns it off and takes the marketplace back.
+`runcommand init --surfaces claude-desktop`. It installs the mod the way `/plugin` would, with
+`claude plugin marketplace add` and `claude plugin install`, so it shows in `claude plugin
+list`, then turns on the marketplace's auto-update in `~/.claude/settings.json`. Where the
+`claude` CLI isn't on your PATH, it declares the marketplace and the mod in that file instead:
+Claude Code then fetches the mod when a session next starts, but lists it only once you run
+`claude plugin install runcommand@runcommand`. `runcommand uninstall` removes the mod and its
+marketplace.
 
 By hand instead, at the prompt of a terminal session:
 

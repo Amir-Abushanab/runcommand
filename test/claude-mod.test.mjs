@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { planDesktopMod, withDesktopMod, planDesktopModRemoval } from "../bin/runcommand.mjs";
+import { planDesktopMod, withDesktopMod, planDesktopModRemoval, modListed } from "../bin/runcommand.mjs";
 
 const readJson = (p) => JSON.parse(fs.readFileSync(new URL(p, import.meta.url), "utf8"));
 const manifest = readJson("../integrations/claude-code/.claude-plugin/plugin.json");
@@ -97,4 +97,15 @@ test("planDesktopModRemoval: leaves alone what init didn't add", () => {
     enabledPlugins: { "runcommand@runcommand": true },
   };
   assert.deepEqual(planDesktopModRemoval(local), { action: "foreign", from: "/src/runcommand" });
+});
+
+test("modListed: reads `claude plugin list --json` for the mod's install record", () => {
+  const record = { id: "runcommand@runcommand", version: "0.1.0", scope: "user", enabled: true };
+  assert.equal(modListed(JSON.stringify([{ id: "obrigado@obrigado" }, record])), true);
+  assert.equal(modListed(JSON.stringify([{ id: "obrigado@obrigado" }])), false);
+  assert.equal(modListed("[]"), false);
+  // An older Claude Code without --json, or a run that failed: unknown, not "absent".
+  assert.equal(modListed("Installed plugins:\n  ❯ runcommand@runcommand"), null);
+  assert.equal(modListed('{"plugins":[]}'), null);
+  assert.equal(modListed(""), null);
 });
