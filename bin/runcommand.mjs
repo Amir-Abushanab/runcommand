@@ -1131,6 +1131,102 @@ function unwireJson(h) {
   return { action: base ? "unwrapped" : "removed", file: h.file, bak };
 }
 
+// The Claude desktop app: its Code tab runs Claude Code with no status line, so there the
+// line comes from the Claude Code mod in integrations/claude-code. Claude Code installs a
+// plugin that a settings file enables from a marketplace a settings file declares (a session
+// clones the marketplace and fetches the plugin in the background), so installing it is two
+// entries in the same ~/.claude/settings.json the status line lives in. `autoUpdate` is why
+// init declares the marketplace itself: Claude Code leaves it off for every marketplace but
+// Anthropic's own, and without it no release of the mod ever reaches an install.
+const MOD_MARKETPLACE = "runcommand";
+const MOD_REPO = "Amir-Abushanab/runcommand";
+const MOD_ID = `runcommand@${MOD_MARKETPLACE}`;
+// Where the app keeps the Claude Code it runs, there once its Code tab has been used. Seen on
+// macOS; elsewhere `--surfaces claude-desktop` picks it by name.
+const DESKTOP_CLAUDE_CODE_DIR = path.join(os.homedir(), "Library", "Application Support", "Claude", "claude-code");
+const MOD_HARNESSES = [
+  {
+    key: "claude-desktop", label: "Claude desktop app", mod: true,
+    file: path.join(os.homedir(), ".claude", "settings.json"),
+    installed: () => process.platform === "darwin" && exists(DESKTOP_CLAUDE_CODE_DIR),
+  },
+];
+const isObj = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+// This repository, however a declaration spells it: GitHub's owner/repo (in any case, as
+// GitHub reads it) or a clone URL. A pinned `ref` is still ours.
+function isOurMarketplace(entry) {
+  const src = isObj(entry) && isObj(entry.source) ? entry.source : {};
+  if (src.source === "github") return String(src.repo).toLowerCase() === MOD_REPO.toLowerCase();
+  if (src.source === "git") return /^(?:https:\/\/|git@)github\.com[/:]amir-abushanab\/runcommand(?:\.git)?\/?$/i.test(String(src.url));
+  return false;
+}
+function sourceOf(entry) {
+  const src = isObj(entry) && isObj(entry.source) ? entry.source : {};
+  return src.repo || src.url || src.path || "somewhere else";
+}
+// What installing the mod would do to these settings: "add", "update" (ours, but turned off
+// or not updating itself), "none", or "refused" with why. A marketplace by our name that is
+// not this repository (a checkout added while working on the mod, say) is never replaced.
+function planDesktopMod(settings) {
+  const j = isObj(settings) ? settings : {};
+  for (const key of ["extraKnownMarketplaces", "enabledPlugins"]) {
+    if (j[key] !== undefined && !isObj(j[key])) return { action: "refused", reason: `its ${key} isn't an object` };
+  }
+  const declared = (j.extraKnownMarketplaces || {})[MOD_MARKETPLACE];
+  if (declared !== undefined && !isOurMarketplace(declared)) {
+    return { action: "refused", reason: `the marketplace named "${MOD_MARKETPLACE}" there comes from ${sourceOf(declared)}` };
+  }
+  if (declared === undefined) return { action: "add" };
+  return declared.autoUpdate === true && (j.enabledPlugins || {})[MOD_ID] === true ? { action: "none" } : { action: "update" };
+}
+// The settings with the marketplace declared, auto-update on, and the mod enabled. Every
+// other key and entry is carried through, and a declaration that's already ours keeps its
+// own fields.
+function withDesktopMod(settings) {
+  const j = isObj(settings) ? settings : {};
+  const markets = isObj(j.extraKnownMarketplaces) ? j.extraKnownMarketplaces : {};
+  const declared = markets[MOD_MARKETPLACE];
+  const entry = isOurMarketplace(declared)
+    ? { ...declared, autoUpdate: true }
+    : { source: { source: "github", repo: MOD_REPO }, autoUpdate: true };
+  return {
+    ...j,
+    extraKnownMarketplaces: { ...markets, [MOD_MARKETPLACE]: entry },
+    enabledPlugins: { ...(isObj(j.enabledPlugins) ? j.enabledPlugins : {}), [MOD_ID]: true },
+  };
+}
+// Uninstall: the mod turned off and our marketplace taken back. Turned off rather than
+// dropped from enabledPlugins, because Claude Code keeps an installed plugin enabled when no
+// settings file names it. A mod enabled from a marketplace init didn't declare is left alone,
+// like a status line runcommand didn't wire.
+function planDesktopModRemoval(settings) {
+  const j = isObj(settings) ? settings : {};
+  const markets = isObj(j.extraKnownMarketplaces) ? j.extraKnownMarketplaces : {};
+  const plugins = isObj(j.enabledPlugins) ? j.enabledPlugins : {};
+  const declared = markets[MOD_MARKETPLACE];
+  if (!isOurMarketplace(declared)) {
+    return declared !== undefined && plugins[MOD_ID] === true ? { action: "foreign", from: sourceOf(declared) } : { action: "none" };
+  }
+  const rest = Object.fromEntries(Object.entries(markets).filter(([name]) => name !== MOD_MARKETPLACE));
+  const next = { ...j, enabledPlugins: { ...plugins, [MOD_ID]: false } };
+  if (Object.keys(rest).length) next.extraKnownMarketplaces = rest;
+  else delete next.extraKnownMarketplaces;
+  return { action: "remove", settings: next };
+}
+// settings.json as an object, or null where it isn't one: a file Claude Code itself would
+// reject is never rewritten. A missing file reads as empty.
+function readSettings(file) {
+  const text = readText(file);
+  if (text === null) return exists(file) ? null : {};
+  try { const j = JSON.parse(text); return isObj(j) ? j : null; } catch { return null; }
+}
+function writeSettings(file, j) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const bak = backupFile(file);
+  fs.writeFileSync(file, JSON.stringify(j, null, 2) + "\n");
+  return bak;
+}
+
 // Append-block surfaces (starship, tmux): append a marker-fenced block to a config
 // file so uninstall removes exactly what init added and never touches a hand-written
 // config. Coexistence is native — starship shows custom modules alongside the rest,
@@ -1253,7 +1349,7 @@ function manualNotes(say) {
   if (!!findBin("opencode") || exists(path.join(CONFIG_HOME, "opencode"))) {
     say(`\n• OpenCode detected — it renders via a plugin, not a status-line command.`);
     say(`  See the README "Other surfaces" for the drop-in plugin;`);
-    say(`  this installer doesn't manage plugins.`);
+    say(`  this installer doesn't manage OpenCode's plugins.`);
   }
   if (!!findBin("codex") || exists(path.join(os.homedir(), ".codex"))) {
     say(`\n• Codex detected — a native status line is pending (openai/codex#17827).`);
@@ -1294,7 +1390,7 @@ async function runInit() {
     say(`manager like nvm or fnm: its globals drop off PATH at the next Node upgrade.)`);
     return;
   }
-  const auto = [...JSON_HARNESSES, ...BLOCK_HARNESSES];
+  const auto = [...JSON_HARNESSES, ...MOD_HARNESSES, ...BLOCK_HARNESSES];
   const interactive = !!process.stdin.isTTY && !ARGS.yes;
   if (!interactive && !ARGS.yes && !dry) {
     say("runcommand init: run in a terminal, or pass --yes to apply (or --dry-run to preview).");
@@ -1344,6 +1440,23 @@ async function runInit() {
     say(`\nWiring: ${picks.map((h) => h.label).join(", ")}`);
     // 3. apply
     for (const h of picks) {
+      if (h.mod) {
+        const settings = readSettings(h.file);
+        if (!settings) { say(`\n  ${h.label}: ${h.file} isn't a JSON object — left alone`); continue; }
+        const p = planDesktopMod(settings);
+        if (p.action === "none") { say(`\n  ${h.label}: mod already installed, updating itself — ${h.file}`); continue; }
+        if (p.action === "refused") { say(`\n  ${h.label}: ${p.reason} — left alone (${h.file})`); continue; }
+        say(`\n  ${h.label}: ${h.file}`);
+        say(`    installs the runcommand mod, which draws the line above the prompt in the app's Code tab`);
+        say(`    extraKnownMarketplaces.${MOD_MARKETPLACE} = ${MOD_REPO} on GitHub, autoUpdate: true`);
+        say(`    enabledPlugins["${MOD_ID}"] = true`);
+        if (dry) { say(`    [dry-run] not written`); continue; }
+        if (!(await confirm(rl, `    apply? [Y/n] `))) { say(`    skipped`); continue; }
+        const bak = writeSettings(h.file, withDesktopMod(settings));
+        say(`    ✓ installed${bak ? `  (backup: ${path.basename(bak)})` : ""}`);
+        say(`    Claude Code fetches it when a session next starts, and each release after that by itself`);
+        continue;
+      }
       if (h.block) {
         const p = planBlock(h);
         if (p.action === "none") {
@@ -1399,6 +1512,15 @@ async function runUninstall() {
     if (dry) { say(`  ${h.label}: [dry-run] would ${wrapped ? "restore your previous status line" : "remove statusLine"} — ${h.file}`); continue; }
     const r = unwireJson(h);
     say(`  ${h.label}: ${r.action === "unwrapped" ? "restored your previous status line" : "removed statusLine"} — ${h.file}${r.bak ? `  (backup: ${path.basename(r.bak)})` : ""}`);
+  }
+  for (const h of MOD_HARNESSES) {
+    const settings = readSettings(h.file);
+    const r = settings ? planDesktopModRemoval(settings) : { action: "none" };
+    if (r.action === "foreign") { say(`  ${h.label}: the runcommand mod comes from ${r.from}, which init didn't add — left alone`); continue; }
+    if (r.action === "none") { say(`  ${h.label}: not wired by runcommand — left alone`); continue; }
+    if (dry) { say(`  ${h.label}: [dry-run] would turn the runcommand mod off and remove its marketplace — ${h.file}`); continue; }
+    const bak = writeSettings(h.file, r.settings);
+    say(`  ${h.label}: turned the runcommand mod off and removed its marketplace — ${h.file}${bak ? `  (backup: ${path.basename(bak)})` : ""}`);
   }
   for (const h of BLOCK_HARNESSES) {
     const cur = exists(h.file) ? fs.readFileSync(h.file, "utf8") : "";
@@ -1551,4 +1673,4 @@ const invokedAsCli = (() => {
 if (invokedAsCli) main();
 
 // Pure helpers, exported for tests. Nothing here touches the filesystem or spawns.
-export { parseNetstat, cmdlineInProject, normalizeCommands, formatCommandsCLI, keepPort, blockVersionIn, blockFingerprints, isEphemeralInstall, isVersionBoundInstall, listManifests, listNestedSignals, isProjectContainer, collectSignals, signalsHash, cleanCmd, parseCommands, BLOCK_V, CACHE_V };
+export { parseNetstat, cmdlineInProject, normalizeCommands, formatCommandsCLI, keepPort, blockVersionIn, blockFingerprints, isEphemeralInstall, isVersionBoundInstall, listManifests, listNestedSignals, isProjectContainer, collectSignals, signalsHash, cleanCmd, parseCommands, planDesktopMod, withDesktopMod, planDesktopModRemoval, BLOCK_V, CACHE_V };

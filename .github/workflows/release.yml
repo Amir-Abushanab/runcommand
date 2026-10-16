@@ -4,13 +4,18 @@ name: Release
 #
 # On every push to main:
 #   • pending changesets → opens/updates the "Version Packages" PR
-#     (`changeset version`: bumps each package and writes CHANGELOGs via
-#     @changesets/changelog-github). Merging that PR is the release approval.
+#     (`pnpm run version`: `changeset version` bumps each package and writes
+#     CHANGELOGs via @changesets/changelog-github, then the Claude Code mod's
+#     version is copied into its plugin.json). Merging that PR is the release
+#     approval.
 #   • no pending changesets (i.e. the Version PR just merged) → publishes
 #     whatever is unpublished (`pnpm release`) and pushes the @pkg@x.y.z tags.
 #
-# The two packages version INDEPENDENTLY — no `fixed` group in .changeset/config.json,
-# because a plugin fix shouldn't bump the CLI.
+# The packages version INDEPENDENTLY — no `fixed` group in .changeset/config.json,
+# because a plugin fix shouldn't bump the CLI. The Claude Code mod is private: it's
+# versioned here but never published to npm, since Claude Code installs it from this
+# repository's marketplace — and replaces an install only when plugin.json's version
+# changes.
 #
 # Auth: NO npm token anywhere. At publish, pnpm exchanges this job's GitHub OIDC
 # identity (this repo + this workflow file) for a short-lived npm credential. Each
@@ -75,6 +80,9 @@ jobs:
       - name: Version Packages PR / publish
         uses: changesets/action@v1
         with:
+          # Not the action's default (`changeset version` alone): the script also syncs
+          # the mod's plugin.json, which is the version Claude Code reads.
+          version: pnpm run version
           publish: pnpm release # changeset publish (creates the tags)
           title: "chore: version packages"
           commit: "chore: version packages"

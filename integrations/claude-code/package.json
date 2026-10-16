@@ -1,0 +1,14 @@
+{
+  "name": "@amabush/runcommand-claude-code",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Claude Code mod: the project's run command + clickable live localhost ports above the prompt in the Claude desktop app (powered by runcommand). Installed from this repository's marketplace, never from npm; this file exists so changesets can version it.",
+  "author": "Amir Abushanab",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Amir-Abushanab/runcommand.git",
+    "directory": "integrations/claude-code"
+  },
+  "homepage": "https://github.com/Amir-Abushanab/runcommand/tree/main/integrations/claude-code"
+}

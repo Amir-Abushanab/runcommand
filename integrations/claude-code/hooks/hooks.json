@@ -1,0 +1,4 @@
+{
+  "description": "runcommand's hooks module: the run command and live ports in the band above the prompt",
+  "modules": ["./register.tsx"]
+}

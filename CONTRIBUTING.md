@@ -64,8 +64,17 @@ Trusted Publisher on npmjs.com must name exactly `Amir-Abushanab / runcommand /
 release.yml`. `pnpm test` gates the publish inside that workflow, because `ci.yml` is a
 separate workflow that couldn't otherwise block it.
 
-The two packages version **independently** (no `fixed` group): a plugin fix shouldn't
+The packages version **independently** (no `fixed` group): a plugin fix shouldn't
 bump the CLI.
+
+The Claude Code mod (`integrations/claude-code`) is versioned the same way but never
+reaches npm. It's a private package (`privatePackages.version` lets changesets bump it)
+because Claude Code installs it from this repository's marketplace and replaces an installed
+copy only when its `plugin.json` version changes. So the workflow versions with `pnpm run
+version`, which runs `changeset version` and then copies the mod's version into its
+`plugin.json` (`scripts/sync-mod-version.mjs`), and `test/claude-mod.test.mjs` fails the
+build if the two ever disagree. A mod change merged without a changeset reaches new installs,
+since the marketplace serves `main`, but no existing one.
 
 The rule that matters is the one changesets can't enforce on its own — **the npm version and
 `BLOCK_V` are independent, and only `BLOCK_V` affects config people already have on disk.**
