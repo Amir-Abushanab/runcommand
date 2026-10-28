@@ -29,7 +29,7 @@
     "solid-js": "^1.9.12"
   },
   "devDependencies": {
-    "@opencode-ai/plugin": "^1.18.10"
+    "@opencode-ai/plugin": "^1.19.3"
   },
   "scripts": {
     "build": "bun run build.mjs",

@@ -24,7 +24,7 @@ jobs:
         with:
           path: site
           # Pinned by hand: the action takes a version, not package.json's devEngines.
-          # pnpm@11 needs >= 22.13 — this is about building the site on one known version.
+          # astro 7.4 needs >= 22.22 — this is about building the site on one known version.
           node-version: 22
           # pnpm version comes from site/package.json's "packageManager" field.
           # Don't also set package-manager here — the two conflict and fail the build.
