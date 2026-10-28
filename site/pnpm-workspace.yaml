@@ -1,3 +1,7 @@
 allowBuilds:
   esbuild: true
   sharp: true
+
+# Same 7-day install-time cooldown as the repo root's pnpm-workspace.yaml (this site keeps its own
+# lockfile, so the root setting does not reach it). See the comment there.
+minimumReleaseAge: 10080
